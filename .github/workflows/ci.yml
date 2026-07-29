@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the 32-bit MinGW cross-compiler
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-i686
+
+      # Mercenaries 2 is a 32-bit process, so this is the only target that matters.
+      - name: Build m2-sdk.dll
+        run: make build
+
+      - name: It is a 32-bit PE with the exports consumers bind to
+        run: |
+          set -euo pipefail
+          file build/m2-sdk.dll | grep -q "PE32 .*80386" \
+            || { echo "::error::m2-sdk.dll is not a 32-bit PE"; exit 1; }
+          for sym in m2_hook_attach m2_logf_mod m2_loghook_add_listener \
+                     m2_loadtrigger_on_phase m2_version_num; do
+            i686-w64-mingw32-objdump -p build/m2-sdk.dll | grep -q " $sym$" \
+              || { echo "::error::m2-sdk.dll does not export $sym"; exit 1; }
+          done
+          echo "exports verified"
+
+      # ★ The check that catches what compiling cannot. A mod that fails to bind to the shared layer
+      # still compiles — it just silently links a private copy, or fails to load on a player's
+      # machine with 0x8007007E and no reason given. Only the import table settles it.
+      - name: A consumer links against the shared layer
+        run: make -C test/consumer verify
+
+  ladder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # m2/load_ladder.gen.{h,c} are generated from loadprobe's phases.rs, which lives in another
+      # repo. Without that checkout there is nothing to compare against, and a guard that silently
+      # passes when it cannot run is worse than no guard — so a failed checkout fails the job.
+      - name: Check out loadprobe's source of truth
+        uses: actions/checkout@v4
+        with:
+          repository: Mercenaries-Fan-Build/mercs2-wad-simulator
+          path: .loadprobe
+          sparse-checkout: crates/loadprobe/src
+          sparse-checkout-cone-mode: false
+
+      # The drift is silent in the game: m2_loadtrigger just stops matching milestones loadprobe has
+      # renamed, and no mod reports anything. This target existed unwired for months.
+      - name: The world-load ladder has not drifted
+        run: make ladder-check PHASES=.loadprobe/crates/loadprobe/src/phases.rs
