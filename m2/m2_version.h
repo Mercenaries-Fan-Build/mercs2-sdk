@@ -25,16 +25,16 @@
 #include "m2_api.h"
 
 #define M2_VERSION_MAJOR 0
-#define M2_VERSION_MINOR 1
-#define M2_VERSION_PATCH 0
+#define M2_VERSION_MINOR 0
+#define M2_VERSION_PATCH 1
 
 #define M2_VERSION_AT_LEAST(maj, min, pat) ((maj) * 10000 + (min) * 100 + (pat))
 
-/* Ordered and comparable: 0.1.0 -> 100. */
+/* Ordered and comparable: 0.0.1 -> 1, 0.2.0 -> 200. */
 #define M2_VERSION_NUM \
     M2_VERSION_AT_LEAST(M2_VERSION_MAJOR, M2_VERSION_MINOR, M2_VERSION_PATCH)
 
-#define M2_VERSION_STRING "0.1.0"
+#define M2_VERSION_STRING "0.0.1"
 
 /* What the LOADED m2-sdk.dll reports, which may differ from the header this mod compiled against. */
 M2_API int m2_version_num(void);
