@@ -1,0 +1,9 @@
+# Build output. m2-sdk.dll and its import library are reproducible from source, and a committed
+# binary is the thing consumers accidentally bind against instead of the one they just built.
+build/
+
+# Consumer smoke-test output.
+test/consumer/*.asi
+
+.DS_Store
+Thumbs.db
