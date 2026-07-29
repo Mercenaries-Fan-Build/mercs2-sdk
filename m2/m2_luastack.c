@@ -1,5 +1,6 @@
 #include "m2_luastack.h"
 #include <windows.h>
+#include <string.h>   /* memcpy, for the float reinterpret in m2_lua_arg_number */
 
 /* --- Lua 5.1.2 (32-bit, float number) layout --- */
 typedef struct { DWORD value; DWORD tt; } LuaTValue;
@@ -12,7 +13,12 @@ typedef struct { DWORD value; DWORD tt; } LuaTValue;
 #define CALLINFO_OFF_BASE         0x00
 #define CALLINFO_OFF_FUNC         0x04
 
-#define LUA_TSTRING 4
+/* Lua 5.1 type tags. Confirmed against the game's own cfuncs, which write `tt = 0` to push nil and
+ * `tt = 1` with `value = 1` to push true (e.g. Object.SetInfiniteAmmo at 0x005CE7E0). */
+#define LUA_TNIL     0
+#define LUA_TBOOLEAN 1
+#define LUA_TNUMBER  3
+#define LUA_TSTRING  4
 #define TSTRING_DATA_OFF 16   /* string bytes start at TString + 16 (32-bit) */
 
 #define MAX_ARGS 32
@@ -114,6 +120,54 @@ int m2_lua_nargs(void* L) {
     int nargs;
     if (!ResolveStack(L, &base, &nargs)) return -1;
     return nargs;
+}
+
+int m2_lua_arg_type(void* L, int idx0) {
+    LuaTValue* base;
+    int nargs;
+    if (!ResolveStack(L, &base, &nargs)) return -1;
+    if (idx0 < 0 || idx0 >= nargs) return -1;
+    return (int)(base + idx0)->tt;
+}
+
+/* ★ This build stores lua_Number as a 32-bit FLOAT, not a double.
+ *
+ * `luaconf.h` is configurable and Mercenaries 2 ships the float variant — which is why TValue is 8
+ * bytes here (4 value + 4 tag) rather than the 16 a double build needs, and why m2_lua_nargs can
+ * divide the frame by 8. Reading the value word as a double would decode garbage.
+ *
+ * Returned as double purely so callers do not have to think about it.
+ */
+int m2_lua_arg_number(void* L, int idx0, double* out) {
+    LuaTValue* base;
+    int nargs;
+    LuaTValue arg;
+    float f;
+    if (!ResolveStack(L, &base, &nargs)) return 0;
+    if (idx0 < 0 || idx0 >= nargs) return 0;
+    arg = *(base + idx0);
+    if (arg.tt != LUA_TNUMBER) return 0;
+    memcpy(&f, &arg.value, sizeof(f));   /* not a cast: reinterpret the bits */
+    if (out) *out = (double)f;
+    return 1;
+}
+
+/* Lua truthiness, not C truthiness: only nil and false are false. A missing argument is reported
+ * separately via the return value, because "absent" and "false" are different to every cfunc here
+ * — Gui.ShowLoadingHints treats an omitted argument as TRUE. */
+int m2_lua_arg_bool(void* L, int idx0, int* out) {
+    LuaTValue* base;
+    int nargs;
+    LuaTValue arg;
+    if (!ResolveStack(L, &base, &nargs)) return 0;
+    if (idx0 < 0 || idx0 >= nargs) return 0;
+    arg = *(base + idx0);
+    if (out) {
+        if (arg.tt == LUA_TNIL) *out = 0;
+        else if (arg.tt == LUA_TBOOLEAN) *out = (arg.value != 0);
+        else *out = 1;
+    }
+    return 1;
 }
 
 int m2_lua_arg_string(void* L, int idx0, char* out, int out_max) {
