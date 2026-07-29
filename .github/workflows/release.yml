@@ -1,0 +1,89 @@
+name: Release
+
+# Publishes m2-sdk.dll and its import library.
+#
+# Consumers cannot build a mod without these: the SDK is a shared DLL, so `m2-sdk.dll` has to ship
+# beside every .asi that links it, and `libm2-sdk.dll.a` is what a mod's linker binds against if it
+# is not building the SDK from the submodule.
+#
+# Triggers on BOTH a published release (cutting one in the GitHub UI) and a `v*` tag push, because
+# either is a reasonable way to cut a release and getting no assets from one of them is a silent
+# failure — the release just sits there empty.
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ★ The tag and m2_version.h must agree, or m2_abi_ok() is a lie.
+      #
+      # A mod compiled against this header records M2_VERSION_NUM and compares it at load against the
+      # DLL's m2_version_num(). If the header says 0.2.0 while the release everyone downloads is
+      # tagged v0.1.0, that comparison is against a number no shipped DLL reports — so the guard
+      # either never fires or always fires, and in both cases stops meaning anything.
+      #
+      # Fail the release rather than publish a DLL whose self-reported version does not match its tag.
+      - name: The tag matches m2_version.h
+        if: github.ref_type == 'tag'
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          hdr=$(sed -n 's/^#define M2_VERSION_STRING "\(.*\)"$/\1/p' m2/m2_version.h)
+          echo "tag=$tag  m2_version.h=$hdr"
+          if [ "$tag" != "$hdr" ]; then
+            echo "::error::tag v$tag does not match M2_VERSION_STRING \"$hdr\" — bump m2/m2_version.h (and regenerate nothing else) before tagging"
+            exit 1
+          fi
+
+      - name: Install the 32-bit MinGW cross-compiler
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-i686
+
+      - name: Build m2-sdk.dll
+        run: make build
+
+      - name: It is a 32-bit PE and the DLL reports the tagged version
+        run: |
+          set -euo pipefail
+          file build/m2-sdk.dll | grep -q "PE32 .*80386" \
+            || { echo "::error::m2-sdk.dll is not a 32-bit PE"; exit 1; }
+          hdr=$(sed -n 's/^#define M2_VERSION_STRING "\(.*\)"$/\1/p' m2/m2_version.h)
+          strings build/m2-sdk.dll | grep -qF "$hdr" \
+            || { echo "::error::m2-sdk.dll does not carry its version string"; exit 1; }
+
+      # A consumer that links but does not bind is the failure this catches — it compiles clean and
+      # only fails on a player's machine.
+      - name: A consumer links against the built DLL
+        run: make -C test/consumer verify
+
+      # Headers too: a mod author who is not using the submodule needs them to compile at all.
+      - name: Package the headers
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp build/m2-sdk.dll build/libm2-sdk.dll.a dist/
+          zip -j "dist/m2-sdk-${GITHUB_REF_NAME}-headers.zip" m2/*.h
+          ls -la dist
+
+      # Only a tag ref can name a release. A workflow_dispatch from a branch still builds and
+      # verifies above, which is the useful half, but has nothing to attach to.
+      - name: Attach to the release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            dist/m2-sdk.dll
+            dist/libm2-sdk.dll.a
+            dist/m2-sdk-${{ github.ref_name }}-headers.zip
