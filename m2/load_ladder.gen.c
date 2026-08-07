@@ -2,7 +2,7 @@
 /* Source of truth: loadprobe/src/phases.rs */
 #include "load_ladder.gen.h"
 
-static const char* const k_m2_phase_0_matches[] = { "PMC Blackbox v3" };
+static const char* const k_m2_phase_0_matches[] = { "PMC Blackbox v" };
 static const char* const k_m2_phase_1_matches[] = { "render-instance pool initialized" };
 static const char* const k_m2_phase_2_matches[] = { "SoundShellBootstrap.Init" };
 static const char* const k_m2_phase_3_matches[] = { "Top of ShellBootstrap::Init()" };
