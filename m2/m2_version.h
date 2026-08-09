@@ -24,9 +24,19 @@
 
 #include "m2_api.h"
 
+/* The version is injected by the release pipeline from the git tag — see .github/workflows/
+ * release.yml, which builds `make build VERSION=<tag without the v>`. These fallbacks are the
+ * dev-build default: an un-tagged local build reports 0.0.0, a number no release ever carries.
+ * Do NOT bump these by hand — the tag is the single source of truth and the pipeline bakes it in. */
+#ifndef M2_VERSION_MAJOR
 #define M2_VERSION_MAJOR 0
-#define M2_VERSION_MINOR 1
+#endif
+#ifndef M2_VERSION_MINOR
+#define M2_VERSION_MINOR 0
+#endif
+#ifndef M2_VERSION_PATCH
 #define M2_VERSION_PATCH 0
+#endif
 
 #define M2_VERSION_AT_LEAST(maj, min, pat) ((maj) * 10000 + (min) * 100 + (pat))
 
@@ -34,7 +44,12 @@
 #define M2_VERSION_NUM \
     M2_VERSION_AT_LEAST(M2_VERSION_MAJOR, M2_VERSION_MINOR, M2_VERSION_PATCH)
 
-#define M2_VERSION_STRING "0.1.0"
+/* Built from the numeric parts so there is ONE source of the version, not two to keep in sync.
+ * Adjacent string-literal concatenation (C phase 6) folds "0" "." "0" "." "2" into "0.0.2". */
+#define M2_VERSION__STR2(x) #x
+#define M2_VERSION__STR(x) M2_VERSION__STR2(x)
+#define M2_VERSION_STRING \
+    M2_VERSION__STR(M2_VERSION_MAJOR) "." M2_VERSION__STR(M2_VERSION_MINOR) "." M2_VERSION__STR(M2_VERSION_PATCH)
 
 /* What the LOADED m2-sdk.dll reports, which may differ from the header this mod compiled against. */
 M2_API int m2_version_num(void);

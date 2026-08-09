@@ -13,8 +13,18 @@ DLL    := $(BUILDDIR)/m2-sdk.dll
 IMPLIB := $(BUILDDIR)/libm2-sdk.dll.a
 OBJS   := $(patsubst %.c,$(OBJDIR)/%.o,$(subst /,_,$(M2_SRCS)))
 
+# The release pipeline injects the version from the git tag: `make build VERSION=0.0.2` (the
+# workflow passes VERSION=${tag#v}). A bare `make build` leaves m2_version.h's 0.0.0 dev default.
+# The tag is the single source of truth — nothing is version-bumped by hand.
+ifdef VERSION
+  VERSION_DEFS := \
+    -DM2_VERSION_MAJOR=$(word 1,$(subst ., ,$(VERSION))) \
+    -DM2_VERSION_MINOR=$(word 2,$(subst ., ,$(VERSION))) \
+    -DM2_VERSION_PATCH=$(word 3,$(subst ., ,$(VERSION)))
+endif
+
 # M2_BUILDING_DLL flips M2_API from dllimport to dllexport (see m2/m2_api.h).
-CFLAGS  := -O2 -Wall -DM2_BUILDING_DLL $(M2_CFLAGS)
+CFLAGS  := -O2 -Wall -DM2_BUILDING_DLL $(M2_CFLAGS) $(VERSION_DEFS)
 LDFLAGS := -shared -static-libgcc -lkernel32 -luser32
 
 .PHONY: all build ladder ladder-check clean help

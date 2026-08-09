@@ -27,40 +27,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ★ The tag and m2_version.h must agree, or m2_abi_ok() is a lie.
+      # ★ The version is not hand-maintained — the tag IS the version, and this build injects it.
       #
-      # A mod compiled against this header records M2_VERSION_NUM and compares it at load against the
-      # DLL's m2_version_num(). If the header says 0.2.0 while the release everyone downloads is
-      # tagged v0.1.0, that comparison is against a number no shipped DLL reports — so the guard
-      # either never fires or always fires, and in both cases stops meaning anything.
-      #
-      # Fail the release rather than publish a DLL whose self-reported version does not match its tag.
-      - name: The tag matches m2_version.h
-        if: github.ref_type == 'tag'
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME#v}"
-          hdr=$(sed -n 's/^#define M2_VERSION_STRING "\(.*\)"$/\1/p' m2/m2_version.h)
-          echo "tag=$tag  m2_version.h=$hdr"
-          if [ "$tag" != "$hdr" ]; then
-            echo "::error::tag v$tag does not match M2_VERSION_STRING \"$hdr\" — bump m2/m2_version.h (and regenerate nothing else) before tagging"
-            exit 1
-          fi
+      # m2_version.h carries only a 0.0.0 dev fallback; a tag build compiles with the tag baked in
+      # (`make build VERSION=<tag>`), so the DLL's m2_version_num()/m2_version_string() can never
+      # drift from the tag everyone downloads. The old "tag matches header" gate is gone because
+      # there is no longer a hand-set header version for it to disagree with.
 
       - name: Install the 32-bit MinGW cross-compiler
         run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-i686
 
-      - name: Build m2-sdk.dll
-        run: make build
+      - name: Build m2-sdk.dll (version injected from the tag)
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE:-}" = tag ]; then
+            make build VERSION="${GITHUB_REF_NAME#v}"
+          else
+            make build   # branch dispatch: dev 0.0.0, verified below but never attached
+          fi
 
-      - name: It is a 32-bit PE and the DLL reports the tagged version
+      - name: It is a 32-bit PE that carries the tagged version
         run: |
           set -euo pipefail
           file build/m2-sdk.dll | grep -q "PE32 .*80386" \
             || { echo "::error::m2-sdk.dll is not a 32-bit PE"; exit 1; }
-          hdr=$(sed -n 's/^#define M2_VERSION_STRING "\(.*\)"$/\1/p' m2/m2_version.h)
-          strings build/m2-sdk.dll | grep -qF "$hdr" \
-            || { echo "::error::m2-sdk.dll does not carry its version string"; exit 1; }
+          if [ "${GITHUB_REF_TYPE:-}" = tag ]; then want="${GITHUB_REF_NAME#v}"; else want="0.0.0"; fi
+          strings build/m2-sdk.dll | grep -qF "$want" \
+            || { echo "::error::m2-sdk.dll does not carry version $want"; exit 1; }
 
       # A consumer that links but does not bind is the failure this catches — it compiles clean and
       # only fails on a player's machine.
