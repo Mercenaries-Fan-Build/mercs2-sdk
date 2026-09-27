@@ -15,7 +15,8 @@ OBJS   := $(patsubst %.c,$(OBJDIR)/%.o,$(subst /,_,$(M2_SRCS)))
 
 # The release pipeline injects the version from the git tag: `make build VERSION=0.0.2` (the
 # workflow passes VERSION=${tag#v}). A bare `make build` leaves m2_version.h's 0.0.0 dev default.
-# The tag is the single source of truth — nothing is version-bumped by hand.
+# The tag injects the DLL's version. manifest.yaml carries the same version by hand, and the release
+# workflow refuses to publish when the two differ.
 ifdef VERSION
   VERSION_DEFS := \
     -DM2_VERSION_MAJOR=$(word 1,$(subst ., ,$(VERSION))) \
