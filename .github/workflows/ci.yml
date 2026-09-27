@@ -36,6 +36,62 @@ jobs:
       - name: A consumer links against the shared layer
         run: make -C test/consumer verify
 
+      # ---- The Quartermaster Shipment (manifest.yaml) ----------------------------------------------
+      # manifest.yaml declares src/m2-sdk.dll, a copy of the build output. src/ is gitignored, and qm
+      # refuses a declared source that does not exist, so it is staged here. A missing build output
+      # fails the job.
+      - name: Stage the Shipment's runtime DLL
+        run: |
+          set -euo pipefail
+          if [ ! -f build/m2-sdk.dll ]; then
+            echo "::error::build/m2-sdk.dll is missing, so src/m2-sdk.dll cannot be staged for the Shipment"
+            exit 1
+          fi
+          mkdir -p src
+          cp build/m2-sdk.dll src/m2-sdk.dll
+          cmp build/m2-sdk.dll src/m2-sdk.dll
+          echo "staged build/m2-sdk.dll -> src/m2-sdk.dll ($(wc -c < src/m2-sdk.dll) bytes)"
+
+      # `qm` ships as a prebuilt binary. The version comes from .github/qm-version (shared with
+      # release.yml). The expected sha256 is read from GitHub's own record of the release asset BEFORE
+      # downloading, so the check is against what the release claims to hold rather than against the
+      # bytes that happened to arrive.
+      - name: Install qm (version from .github/qm-version)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          QM_VERSION="$(tr -d '[:space:]' < .github/qm-version)"
+          case "$QM_VERSION" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::.github/qm-version holds '$QM_VERSION', not a vX.Y.Z qm release tag"; exit 1 ;;
+          esac
+          repo=Mercenaries-Fan-Build/mercs2-wad-simulator
+          asset=qm-linux-x86_64
+          want=$(gh api "repos/$repo/releases/tags/$QM_VERSION" \
+            --jq ".assets[] | select(.name == \"$asset\") | .digest") \
+            || { echo "::error::qm release $QM_VERSION was not found in $repo -- check .github/qm-version"; exit 1; }
+          if [ -z "$want" ]; then
+            echo "::error::$asset is not in qm $QM_VERSION -- check .github/qm-version"
+            exit 1
+          fi
+          want=${want#sha256:}
+          gh release download "$QM_VERSION" --repo "$repo" --pattern "$asset" --output qm
+          got=$(sha256sum qm | cut -d' ' -f1)
+          if [ "$want" != "$got" ]; then
+            echo "::error::$asset failed verification -- expected $want, got $got"
+            exit 1
+          fi
+          echo "qm $QM_VERSION verified: $got"
+          chmod +x qm
+
+      # Hermetic: no game install and no retail WADs. Gated on the exit code, not on what gets printed.
+      - name: Lint the Shipment
+        run: ./qm lint .
+
+      - name: The manifest's name and version
+        run: ./qm manifest-info manifest.yaml
+
   ladder:
     runs-on: ubuntu-latest
     steps:
