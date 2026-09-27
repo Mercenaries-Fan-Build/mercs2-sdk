@@ -7,3 +7,7 @@ test/consumer/*.asi
 
 .DS_Store
 Thumbs.db
+
+# The Shipment's staged runtime DLL: manifest.yaml declares src/m2-sdk.dll, which is a copy of
+# build/m2-sdk.dll made after `make build` (by CI, by the release, or by hand before running qm).
+/src/

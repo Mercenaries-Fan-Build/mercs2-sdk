@@ -11,7 +11,8 @@
 #   1. Link with $(M2_LDFLAGS), not $(M2_SRCS). `M2_SRCS` is still defined below, but only so the
 #      SDK can build ITSELF — a mod that compiles it in gets a second private copy of MinHook and
 #      of the log-stub hook, which is exactly what the shared layer exists to prevent.
-#   2. `m2-sdk.dll` must ship BESIDE your .asi. It is a load-time import, so if it is missing the
+#   2. `m2-sdk.dll` lives in the GAME ROOT, placed there by the m2-sdk Shipment; your Shipment
+#      requires m2-sdk rather than shipping a copy. It is a load-time import, so if it is missing the
 #      mod does not load at all: LoadLibrary fails with 0x8007007E before any of your code runs, and
 #      pmc_bb reports only `[FAILED] <name> (error: 0x...)`.
 

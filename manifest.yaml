@@ -1,0 +1,23 @@
+# The m2-sdk Quartermaster Shipment: places m2-sdk.dll in the game root.
+#
+# src/ is generated, never committed. CI and the release copy build/m2-sdk.dll to src/m2-sdk.dll
+# after `make build`. To run qm locally, stage it first:
+#
+#   make build && mkdir -p src && cp build/m2-sdk.dll src/
+#
+# qm refuses a declared source that does not exist, so lint fails until src/m2-sdk.dll is staged.
+format: 2
+shipment:
+  name: m2-sdk
+  title: m2, the shared Mercenaries 2 mod layer
+  version: 0.2.0
+  target: retail
+  authors: [Mercenaries Fan Build]
+  description: >-
+    Runtime only. Places m2-sdk.dll in the game root, where the .asi plugins that import it find it.
+    Nothing runs until a Shipment that requires m2-sdk loads.
+  license: MIT
+  tags: [library, runtime]
+contributions:
+  - kind: add_runtime_dll
+    dll: src/m2-sdk.dll
