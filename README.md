@@ -35,9 +35,11 @@ before. Each was a *silent* failure, which is why they are called out here:
 
 ## ⚠ `m2-sdk.dll` is a load-time dependency
 
-Ship it beside your `.asi`. If it is missing or the wrong architecture the mod **does not load at
-all**: `LoadLibrary` fails with `0x8007007E` before any of your code runs, so the mod cannot report
-the problem itself. pmc_bb logs only `[FAILED] <name> (error: 0x...)`.
+`m2-sdk.dll` lives in the **game root**, and the m2-sdk Shipment is what puts it there (see
+[below](#the-m2-sdk-shipment)). Do not ship your own copy beside your `.asi`: a Shipment that needs
+the SDK declares m2-sdk as a requirement instead. If the DLL is missing or the wrong architecture
+the mod **does not load at all**: `LoadLibrary` fails with `0x8007007E` before any of your code
+runs, so the mod cannot report the problem itself. pmc_bb logs only `[FAILED] <name> (error: 0x...)`.
 
 Guard the other mismatch — a mod built against a newer header than the DLL it finds — in `DllMain`:
 
@@ -48,6 +50,36 @@ if (!m2_abi_ok()) return FALSE;   /* refuse to load rather than misbehave */
 The loader binds imports by **name only**, so a changed signature links happily and corrupts the
 stack with no diagnostic. `m2_abi_ok()` compares the header's `M2_VERSION_NUM` against the DLL's
 `m2_version_num()`.
+
+## The m2-sdk Shipment
+
+m2-sdk is published as a Quartermaster Shipment, described by [`manifest.yaml`](manifest.yaml). Its
+one contribution is an `add_runtime_dll`, which places `m2-sdk.dll` in the game root, where every
+`.asi` that imports it finds it. The Shipment is runtime only: nothing runs until a Shipment that
+requires m2-sdk loads.
+
+A Shipment whose `.asi` links the SDK declares the dependency in its own manifest:
+
+```yaml
+requires: [{ shipment: m2-sdk, version: "^0.2" }]
+```
+
+Each release attaches the Shipment as `m2-sdk-v<version>.zip`, beside `m2-sdk.dll`, the import
+library and the headers. Releases are cut by pushing a `v*` tag, and the committed `manifest.yaml`
+must already carry that version: the release stops if `qm manifest-info` reports anything else.
+
+`manifest.yaml` declares `src/m2-sdk.dll`, which is a copy of the build output. `src/` is gitignored
+and never committed. CI and the release stage it after `make build`. To run `qm` locally, stage it
+yourself first, because qm refuses a declared file that does not exist:
+
+```sh
+make build
+mkdir -p src && cp build/m2-sdk.dll src/
+qm lint .
+qm manifest-info manifest.yaml
+```
+
+The qm release CI uses is pinned in [`.github/qm-version`](.github/qm-version).
 
 ## Modules
 
