@@ -1,22 +1,20 @@
 name: Release
 
-# Publishes m2-sdk.dll and its import library.
+# Publishes m2-sdk.dll, its import library, the headers, and the m2-sdk Quartermaster Shipment.
 #
-# Consumers cannot build a mod without these: the SDK is a shared DLL, so `m2-sdk.dll` has to ship
-# beside every .asi that links it, and `libm2-sdk.dll.a` is what a mod's linker binds against if it
-# is not building the SDK from the submodule.
+# The Shipment (m2-sdk-v<version>.zip) is how players get m2-sdk.dll: it places the DLL in the game
+# root, where every .asi that imports it finds it. `libm2-sdk.dll.a` is what a mod's linker binds
+# against if it is not building the SDK from the submodule, and the headers are what it compiles
+# against.
 #
-# Triggers on BOTH a published release (cutting one in the GitHub UI) and a `v*` tag push, because
-# either is a reasonable way to cut a release and getting no assets from one of them is a silent
-# failure — the release just sits there empty.
+# A `v*` tag push is the only trigger. The tag names the version, the build injects it into the DLL,
+# and the committed manifest.yaml must already carry the same version or the release stops. The
+# release is created in one step with every asset attached, and nothing is uploaded after that.
 
 on:
-  release:
-    types: [published]
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -27,31 +25,71 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ★ The version is not hand-maintained — the tag IS the version, and this build injects it.
-      #
-      # m2_version.h carries only a 0.0.0 dev fallback; a tag build compiles with the tag baked in
-      # (`make build VERSION=<tag>`), so the DLL's m2_version_num()/m2_version_string() can never
-      # drift from the tag everyone downloads. The old "tag matches header" gate is gone because
-      # there is no longer a hand-set header version for it to disagree with.
+      # The qm version comes from .github/qm-version (shared with ci.yml). GitHub's recorded sha256 for
+      # the asset is read BEFORE downloading, and the downloaded bytes must match it.
+      - name: Install qm (version from .github/qm-version)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          QM_VERSION="$(tr -d '[:space:]' < .github/qm-version)"
+          case "$QM_VERSION" in
+            v[0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::.github/qm-version holds '$QM_VERSION', not a vX.Y.Z qm release tag"; exit 1 ;;
+          esac
+          repo=Mercenaries-Fan-Build/mercs2-wad-simulator
+          asset=qm-linux-x86_64
+          want=$(gh api "repos/$repo/releases/tags/$QM_VERSION" \
+            --jq ".assets[] | select(.name == \"$asset\") | .digest") \
+            || { echo "::error::qm release $QM_VERSION was not found in $repo -- check .github/qm-version"; exit 1; }
+          if [ -z "$want" ]; then
+            echo "::error::$asset is not in qm $QM_VERSION -- check .github/qm-version"
+            exit 1
+          fi
+          want=${want#sha256:}
+          gh release download "$QM_VERSION" --repo "$repo" --pattern "$asset" --output qm
+          got=$(sha256sum qm | cut -d' ' -f1)
+          if [ "$want" != "$got" ]; then
+            echo "::error::$asset failed verification -- expected $want, got $got"
+            exit 1
+          fi
+          echo "qm $QM_VERSION verified: $got"
+          chmod +x qm
+
+      # mercs.ink reads manifest.yaml from the repo at the release tag, so the COMMITTED manifest must
+      # already be at the tagged version. Nothing here commits or pushes, so a mismatch fails the release
+      # rather than being fixed up in the runner.
+      - name: manifest.yaml names m2-sdk at the tagged version
+        run: |
+          set -euo pipefail
+          want="${GITHUB_REF_NAME#v}"
+          info="$(./qm manifest-info manifest.yaml)"
+          echo "$info"
+          name="$(jq -r .name <<< "$info")"
+          version="$(jq -r .version <<< "$info")"
+          if [ "$name" != "m2-sdk" ]; then
+            echo "::error::manifest.yaml's shipment.name is '$name', not m2-sdk"
+            exit 1
+          fi
+          if [ "$version" != "$want" ]; then
+            echo "::error::the tag is $GITHUB_REF_NAME but manifest.yaml's shipment.version is '$version'. Commit manifest.yaml at $want and tag again."
+            exit 1
+          fi
 
       - name: Install the 32-bit MinGW cross-compiler
         run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-i686
 
+      # The tag is injected into the DLL: m2_version.h carries only a 0.0.0 dev default, and a tag build
+      # compiles with the tag baked in, so m2_version_num()/m2_version_string() match the tag.
       - name: Build m2-sdk.dll (version injected from the tag)
-        run: |
-          set -euo pipefail
-          if [ "${GITHUB_REF_TYPE:-}" = tag ]; then
-            make build VERSION="${GITHUB_REF_NAME#v}"
-          else
-            make build   # branch dispatch: dev 0.0.0, verified below but never attached
-          fi
+        run: make build VERSION="${GITHUB_REF_NAME#v}"
 
       - name: It is a 32-bit PE that carries the tagged version
         run: |
           set -euo pipefail
           file build/m2-sdk.dll | grep -q "PE32 .*80386" \
             || { echo "::error::m2-sdk.dll is not a 32-bit PE"; exit 1; }
-          if [ "${GITHUB_REF_TYPE:-}" = tag ]; then want="${GITHUB_REF_NAME#v}"; else want="0.0.0"; fi
+          want="${GITHUB_REF_NAME#v}"
           strings build/m2-sdk.dll | grep -qF "$want" \
             || { echo "::error::m2-sdk.dll does not carry version $want"; exit 1; }
 
@@ -60,8 +98,25 @@ jobs:
       - name: A consumer links against the built DLL
         run: make -C test/consumer verify
 
+      # manifest.yaml declares src/m2-sdk.dll, a copy of the build output. src/ is gitignored.
+      - name: Stage the Shipment's runtime DLL
+        run: |
+          set -euo pipefail
+          if [ ! -f build/m2-sdk.dll ]; then
+            echo "::error::build/m2-sdk.dll is missing, so src/m2-sdk.dll cannot be staged for the Shipment"
+            exit 1
+          fi
+          mkdir -p src
+          cp build/m2-sdk.dll src/m2-sdk.dll
+          cmp build/m2-sdk.dll src/m2-sdk.dll
+          echo "staged build/m2-sdk.dll -> src/m2-sdk.dll ($(wc -c < src/m2-sdk.dll) bytes)"
+
+      # Refuse to release a Shipment that does not lint. Gated on the exit code, not on printed output.
+      - name: Lint the Shipment before releasing it
+        run: ./qm lint .
+
       # Headers too: a mod author who is not using the submodule needs them to compile at all.
-      - name: Package the headers
+      - name: Package the DLL, import library and headers
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -69,14 +124,42 @@ jobs:
           zip -j "dist/m2-sdk-${GITHUB_REF_NAME}-headers.zip" m2/*.h
           ls -la dist
 
-      # Only a tag ref can name a release. A workflow_dispatch from a branch still builds and
-      # verifies above, which is the useful half, but has nothing to attach to.
-      - name: Attach to the release
-        if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            dist/m2-sdk.dll
-            dist/libm2-sdk.dll.a
-            dist/m2-sdk-${{ github.ref_name }}-headers.zip
+      # m2-sdk-v<version>.zip is the asset Modkit selects by exact name. It carries the manifest, the
+      # staged DLL, the SDK's license and MinHook's, since MinHook is compiled into the DLL.
+      - name: Package the Shipment zip
+        run: |
+          set -euo pipefail
+          ASSET="dist/m2-sdk-v${GITHUB_REF_NAME#v}.zip"
+          rm -f "$ASSET"
+          zip -r "$ASSET" manifest.yaml src LICENSE minhook/LICENSE.txt
+          # List first, then search the list: piping unzip straight into `grep -q` under pipefail can
+          # fail on SIGPIPE when grep exits at the first match.
+          MEMBERS="$(unzip -Z1 "$ASSET")"
+          grep -qx 'manifest.yaml' <<< "$MEMBERS" || { echo "::error::$ASSET is missing manifest.yaml"; exit 1; }
+          grep -qx 'src/m2-sdk.dll' <<< "$MEMBERS" || { echo "::error::$ASSET is missing src/m2-sdk.dll"; exit 1; }
+          unzip -l "$ASSET"
+
+      # The DLL inside the Shipment must be the same bytes as the loose m2-sdk.dll asset.
+      - name: The Shipment's DLL is the released DLL
+        run: |
+          set -euo pipefail
+          ASSET="dist/m2-sdk-v${GITHUB_REF_NAME#v}.zip"
+          rm -rf _zipcheck
+          mkdir _zipcheck
+          unzip -q "$ASSET" src/m2-sdk.dll -d _zipcheck
+          cmp _zipcheck/src/m2-sdk.dll dist/m2-sdk.dll
+          echo "the Shipment's src/m2-sdk.dll matches dist/m2-sdk.dll"
+
+      # One step creates the release with every asset attached; nothing is uploaded after it is
+      # published.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            dist/m2-sdk.dll \
+            dist/libm2-sdk.dll.a \
+            "dist/m2-sdk-${GITHUB_REF_NAME}-headers.zip" \
+            "dist/m2-sdk-v${GITHUB_REF_NAME#v}.zip" \
+            --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
