@@ -87,13 +87,14 @@ The qm release CI uses is pinned in [`.github/qm-version`](.github/qm-version).
 | --- | --- |
 | [`m2_api.h`](m2/m2_api.h) | Linkage (`M2_API`) and `M2_SELF_MODULE`, the caller's own `HMODULE` via `__ImageBase`. |
 | [`m2_version.h`](m2/m2_version.h) | The SDK's semver and the `m2_abi_ok()` load-time guard. |
-| [`m2_target.h`](m2/m2_target.h) | All binary-specific addresses for the target EXE in one place (log stub, VO bindings, section VAs). |
+| [`m2_target.h`](m2/m2_target.h) | All binary-specific addresses for the target EXE in one place (log stub, VO bindings, shader registration, section VAs). |
 | [`m2_log.h`](m2/m2_log.h) | Per-module `<mod>.log` logging (`m2_log_init` / `m2_logf`). |
 | [`m2_ini.h`](m2/m2_ini.h) | Tiny callback-based INI reader (`m2_ini_parse`, `m2_ini_bool/int`). |
 | [`m2_hook.h`](m2/m2_hook.h) | SecuROM-safe `.text` detours via MinHook (`m2_hook_attach`). |
 | [`m2_luastack.h`](m2/m2_luastack.h) | Bounds-checked reads of a Lua 5.1 (float-build) C-function's string args. |
 | [`m2_loghook.h`](m2/m2_loghook.h) | One subscription to the game's whole log stream. |
 | [`m2_loadtrigger.h`](m2/m2_loadtrigger.h) | Fire callbacks as the world load crosses loadprobe milestones. |
+| [`m2_shader.h`](m2/m2_shader.h) | Register new shaders in the game's own shader registry (the `shader-registry` capability). |
 
 **`.text` MinHook, never `.rdata`.** The cracked retail EXE tolerates code detours but anti-tampers
 registration-table writes — a `.rdata` slot patch crashed early init under SecuROM. `m2_hook` routes
@@ -131,6 +132,90 @@ what this design exists to prevent.
 [`test/consumer`](test/consumer/) is a complete minimal consumer, and `make -C test/consumer verify`
 asserts the built `.asi` really imports `m2-sdk.dll` — compiling proves the headers agree, but only
 the import table proves the binding.
+
+[`test/shader_core`](test/shader_core/) tests the shader registry's platform-independent core with
+the host compiler: `make -C test/shader_core check`.
+
+## Registering shaders
+
+[`m2_shader.h`](m2/m2_shader.h) adds new pixel and vertex shaders to the game's own shader registry,
+through the same engine call retail uses for its built-in shaders. The m2-sdk Shipment declares
+`provides: [shader-registry]`, so a Shipment whose `.asi` uses it requires the capability:
+
+```yaml
+load:
+  requires:
+    - { capability: shader-registry }
+```
+
+```c
+m2_shader_status m2_shader_add_pixel(m2_shader_family family, const m2_shader_class classes[4]);
+m2_shader_status m2_shader_add_vertex(m2_shader_family family, const m2_shader_class* cls);
+m2_shader_status m2_shader_outcome(const char* name);
+const char*      m2_shader_status_name(m2_shader_status s);
+```
+
+**When to call.** Call the add functions from your `DllMain` on `DLL_PROCESS_ATTACH`. The game builds
+its registry once, in `FUN_0084f130`, which the renderer constructor (`FUN_007492d0`) calls during
+startup; a plugin's `DllMain` runs before that. The first add call checks the signatures of the
+engine functions involved, checks that the registry is empty, and installs a MinHook detour on
+`FUN_0084f130`. The detour runs the game's own registration first, then registers every queued
+entry, in queue order.
+
+```c
+static const m2_shader_class kGlow[4] = {
+    { "MyGlowFP",       "MyGlowFP.sho" },
+    { "MyGlowFP_pl",    "MyGlowFP_pl.sho" },
+    { "MyGlowFP_sl",    "MyGlowFP_sl.sho" },
+    { "MyGlowFP_pl_sl", "MyGlowFP_pl_sl.sho" },
+};
+static const m2_shader_class kGlowVs = { "MyGlowVP", "MyGlowVP.sho" };
+
+BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID r) {
+    if (reason == DLL_PROCESS_ATTACH) {
+        if (!m2_abi_ok()) return FALSE;
+        m2_log_init(h);
+        m2_shader_status st = m2_shader_add_pixel(M2_SHADER_FAMILY_BLUR_PIXEL, kGlow);
+        if (st != M2_SHADER_OK) m2_logf("glow: %s", m2_shader_status_name(st));
+        st = m2_shader_add_vertex(M2_SHADER_FAMILY_VERTEX, &kGlowVs);
+        if (st != M2_SHADER_OK) m2_logf("glow vs: %s", m2_shader_status_name(st));
+    }
+    return TRUE;
+}
+```
+
+The name and sho strings are read when the registry is built, after `DllMain` returns, so they must
+live for the whole process. String literals do.
+
+**Families.** `m2_shader_family` names the 45 record families in the retail EXE (26 pixel, 19
+vertex), one per vtable. The SDK holds each family's vtable, record size and stage as data. A
+record is built the way the game's static initializers build theirs: zeroed memory of the family's
+size, the stage's base constructor (`FUN_0085ace0` for pixel, `FUN_0085ade0` for vertex), then the
+family vtable at `+0`, then `FUN_0085ac90(record, name, sho, class)`.
+
+**Classes.** A pixel entry carries 4 classes: plain, `_pl`, `_sl` and `_pl_sl`, registered with
+class 0-3 in that order, so they take consecutive indices. Class 0 always registers. Classes 1-3
+register only when the game's ShaderLevel byte (`0x00dfc345`) is non-zero, which is what retail
+does. A vertex entry carries one class, registered as class 0.
+
+**Statuses.** Every function returns a status; none exits or aborts.
+
+| status | from | meaning |
+|---|---|---|
+| `M2_SHADER_OK` | all | queued, or (from `m2_shader_outcome`) registered |
+| `M2_SHADER_ERR_SIGNATURE` | add | `FUN_0084f130`, `FUN_0085ac90`, `FUN_0085ace0` or `FUN_0085ade0` does not start with the bytes in `m2_target.h`: a different EXE build |
+| `M2_SHADER_ERR_HOOK` | add | MinHook could not install the detour |
+| `M2_SHADER_ERR_TOO_LATE` | add | the game has started its registry (a pool count is non-zero, or the detour has run) |
+| `M2_SHADER_ERR_ARGUMENT` | add, outcome | a null or empty name or sho, or a sho that does not end in `.sho` or is over 128 characters; from `m2_shader_outcome`, a name that was never queued or that the registry has not reached |
+| `M2_SHADER_ERR_DUPLICATE` | add, outcome | a name already queued or repeated within one pixel entry; from `m2_shader_outcome`, a name the game's registry already held |
+| `M2_SHADER_ERR_FAMILY` | add | not a family, or a family of the other stage |
+| `M2_SHADER_ERR_CAPACITY` | add, outcome | the registry holds 0x800 pixel and 0x100 vertex names; the live count plus the entry's registrations exceeds that |
+
+Names compare by the engine's case-folded hash (`FUN_00824270`), so `MyGlowFP` and `myglowfp` are
+one name. Each entry registers or fails on its own: an entry that fails leaves the others
+registered, its names report the error through `m2_shader_outcome`, and one line naming the entry
+and the status goes to the log of the module that queued it (`m2_log_init`). All the names of a
+pixel entry share the entry's outcome.
 
 ## The world-load ladder (generated)
 
