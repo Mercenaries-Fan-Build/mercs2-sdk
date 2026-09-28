@@ -5,6 +5,9 @@ build/
 # Consumer smoke-test output.
 test/consumer/*.asi
 
+# Host test binary for the shader registry core.
+test/shader_core/test_shader_core
+
 .DS_Store
 Thumbs.db
 
