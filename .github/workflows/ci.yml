@@ -24,11 +24,18 @@ jobs:
           file build/m2-sdk.dll | grep -q "PE32 .*80386" \
             || { echo "::error::m2-sdk.dll is not a 32-bit PE"; exit 1; }
           for sym in m2_hook_attach m2_logf_mod m2_loghook_add_listener \
-                     m2_loadtrigger_on_phase m2_version_num; do
+                     m2_loadtrigger_on_phase m2_version_num \
+                     m2_shader_add_pixel m2_shader_add_vertex m2_shader_outcome \
+                     m2_shader_status_name; do
             i686-w64-mingw32-objdump -p build/m2-sdk.dll | grep -q " $sym$" \
               || { echo "::error::m2-sdk.dll does not export $sym"; exit 1; }
           done
           echo "exports verified"
+
+      # The shader registry's core (m2/m2_shader_core.c) has no Windows dependency, so its
+      # validation, hash, pool lookup and admission rules run here with the host compiler.
+      - name: Shader registry core tests
+        run: make -C test/shader_core check
 
       # ★ The check that catches what compiling cannot. A mod that fails to bind to the shared layer
       # still compiles — it just silently links a private copy, or fails to load on a player's
