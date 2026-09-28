@@ -37,6 +37,8 @@ M2_SRCS := \
 	$(M2_SDK_DIR)/m2/m2_loghook.c \
 	$(M2_SDK_DIR)/m2/m2_loadtrigger.c \
 	$(M2_SDK_DIR)/m2/load_ladder.gen.c \
+	$(M2_SDK_DIR)/m2/m2_shader_core.c \
+	$(M2_SDK_DIR)/m2/m2_shader.c \
 	$(M2_MINHOOK)/src/hook.c \
 	$(M2_MINHOOK)/src/buffer.c \
 	$(M2_MINHOOK)/src/trampoline.c \
