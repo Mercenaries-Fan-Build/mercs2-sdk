@@ -18,6 +18,9 @@ shipment:
     Nothing runs until a Shipment that requires m2-sdk loads.
   license: MIT
   tags: [library, runtime]
+load:
+  # m2_shader.h: registers new shaders in the game's shader registry.
+  provides: [shader-registry]
 contributions:
   - kind: add_runtime_dll
     dll: src/m2-sdk.dll
