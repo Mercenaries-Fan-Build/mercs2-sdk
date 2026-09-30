@@ -23,8 +23,9 @@
 #define M2_VO_CUE_VA                0x005E9DE0u
 #define M2_VO_CUEWITHOUTSUBS_VA     0x005E9F40u
 
-/* Shader registration (m2_shader.h). Read from the unpacked EXE and emulated under all 8 caps /
- * ShaderLevel configurations; see the shader-registration RE notes.
+/* Shader registration (m2_shader.h). Read from the unpacked EXE and emulated in eight runs covering
+ * six distinct configurations (three store sets x ShaderLevel); see the shader-registration RE
+ * notes.
  *
  * FUN_0084f130: builds the shader registry. __thiscall (ECX = renderer), one stack argument,
  * `ret 4`. Its only caller is FUN_007492d0 @0x0074957A, the renderer constructor. */
