@@ -10,9 +10,21 @@
  */
 #include "m2.h"
 
+/* Shaders queued for the game's shader registry. The strings are literals because the registry
+ * reads them after DllMain returns. */
+static const m2_shader_class kConsumerPixel[4] = {
+    { "ConsumerFP", "ConsumerFP.sho" },
+    { "ConsumerFP_pl", "ConsumerFP_pl.sho" },
+    { "ConsumerFP_sl", "ConsumerFP_sl.sho" },
+    { "ConsumerFP_pl_sl", "ConsumerFP_pl_sl.sho" },
+};
+static const m2_shader_class kConsumerVertex = { "ConsumerVP", "ConsumerVP.sho" };
+
 static void OnWorldLoaded(int reached_idx, void* ud) {
     (void)ud;
     m2_logf("world reached phase %d (%s)", reached_idx, m2_loadtrigger_phase_name(reached_idx));
+    m2_logf("ConsumerFP: %s", m2_shader_status_name(m2_shader_outcome("ConsumerFP")));
+    m2_logf("ConsumerVP: %s", m2_shader_status_name(m2_shader_outcome("ConsumerVP")));
 }
 
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
@@ -25,6 +37,14 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
 
     m2_log_init(inst);
     m2_logf("consumer smoke test, m2 %s", m2_version_string());
+
+    /* Before the renderer constructor runs FUN_0084f130, which builds the shader registry. */
+    {
+        m2_shader_status st = m2_shader_add_pixel(M2_SHADER_FAMILY_BLUR_PIXEL, kConsumerPixel);
+        if (st != M2_SHADER_OK) m2_logf("m2_shader_add_pixel: %s", m2_shader_status_name(st));
+        st = m2_shader_add_vertex(M2_SHADER_FAMILY_VERTEX, &kConsumerVertex);
+        if (st != M2_SHADER_OK) m2_logf("m2_shader_add_vertex: %s", m2_shader_status_name(st));
+    }
 
     m2_hook_init();
     m2_loadtrigger_on_phase(M2_PHASE_REACHED_WORLD_IDX, OnWorldLoaded, NULL);
