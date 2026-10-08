@@ -35,6 +35,8 @@ M2_SRCS := \
 	$(M2_SDK_DIR)/m2/m2_luastack.c \
 	$(M2_SDK_DIR)/m2/m2_loghook.c \
 	$(M2_SDK_DIR)/m2/m2_loadtrigger.c \
+	$(M2_SDK_DIR)/m2/m2_spawn_registry.c \
+	$(M2_SDK_DIR)/m2/m2_worldentity.c \
 	$(M2_SDK_DIR)/m2/load_ladder.gen.c \
 	$(M2_MINHOOK)/src/hook.c \
 	$(M2_MINHOOK)/src/buffer.c \

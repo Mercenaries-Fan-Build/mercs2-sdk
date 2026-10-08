@@ -16,5 +16,7 @@
 #include "m2_luastack.h"
 #include "m2_loghook.h"
 #include "m2_loadtrigger.h"
+#include "m2_spawn_registry.h"
+#include "m2_worldentity.h"
 
 #endif /* M2_H */
