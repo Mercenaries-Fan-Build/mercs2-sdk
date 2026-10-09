@@ -10,7 +10,7 @@ format: 2
 shipment:
   name: m2-sdk
   title: m2, the shared Mercenaries 2 mod layer
-  version: 0.2.0
+  version: 0.3.1
   target: retail
   authors: [Mercenaries Fan Build]
   description: >-
