@@ -25,7 +25,7 @@
 
 #include <windows.h>
 
-/* M2_BUILDING_DLL is defined only when compiling the SDK itself (see the Makefile). */
+/* Consumers never define M2_BUILDING_DLL, so M2_API is dllimport for them. */
 #ifdef M2_BUILDING_DLL
 #define M2_API __declspec(dllexport)
 #else
