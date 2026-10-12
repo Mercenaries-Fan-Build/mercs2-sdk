@@ -1,8 +1,7 @@
-/* m2_target.h — binary-specific addresses for the target Mercenaries 2 EXE.
- *
- * All hardcoded VAs live here so there is ONE place to retarget if the executable
- * changes. Verified against the cracked retail EXE (53,482,288 bytes, image base
- * 0x00400000) — see the mercenaries-game RE notes.
+/* m2_target.h — addresses in the cracked retail EXE (53,482,288 bytes, image base 0x00400000), for
+ * mods that read them. m2-sdk.dll does not use them: it finds the log stub, the Lua sites and the
+ * shader registry's functions, pool, ShaderLevel and family vtables in the running image by signature
+ * and structure, so it also works on builds where these addresses differ (retail v1.1).
  */
 #ifndef M2_TARGET_H
 #define M2_TARGET_H
