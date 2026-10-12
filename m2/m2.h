@@ -4,7 +4,7 @@
  * config, SecuROM-safe MinHook detours, safe Lua-stack reads, a shared subscription
  * to the game's log stream, and load-progress triggers keyed to loadprobe's
  * world-load ladder, and registration of new shaders in the game's shader
- * registry. Link the SDK sources via sdk/sdk.mk.
+ * registry. Link against m2-sdk.dll via sdk.mk.
  */
 #ifndef M2_H
 #define M2_H
