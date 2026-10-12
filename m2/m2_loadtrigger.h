@@ -1,7 +1,7 @@
 /* m2_loadtrigger.h — fire callbacks as the world load crosses loadprobe milestones.
  *
- * Reuses loadprobe's world-load ladder (sdk/m2/load_ladder.gen.h, generated from
- * its phases.rs — the single source of truth) to turn the live log stream into
+ * Reuses loadprobe's world-load ladder (load_ladder.gen.h, equal to its
+ * phases::LADDER — the single source of truth) to turn the live log stream into
  * load-progress events. A mod registers a callback for a phase index and it fires
  * the moment the load first reaches that phase (or any later one).
  *
