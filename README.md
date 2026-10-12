@@ -6,8 +6,33 @@
 ```sh
 git submodule add https://github.com/Mercenaries-Fan-Build/mercs2-sdk sdk
 git submodule update --init --recursive   # in an existing clone
-make -C sdk build                         # produces sdk/build/m2-sdk.dll + import library
+make -C sdk build WAD_SIMULATOR=/path/to/mercs2-wad-simulator   # sdk/build/m2-sdk.dll + import library
 ```
+
+Each release also attaches `m2-sdk.dll`, `libm2-sdk.dll.a` and the headers, for building a mod without
+building the DLL.
+
+## Building the DLL
+
+`m2-sdk.dll` is built from Rust: `crates/mercs2_mod_runtime` in
+[mercs2-wad-simulator](https://github.com/Mercenaries-Fan-Build/mercs2-wad-simulator) is the `cdylib`,
+and the logic it runs that needs no Windows (INI parsing, the Lua stack reader, the shader registry
+core, the load ladder) lives in `mercs2_formats`, where it is tested on any host. This repository is
+the Shipment: the C headers under `m2/` (the ABI), `sdk.mk`, the tests, and the release.
+
+Needs `rustup` (the crate's `rust-toolchain.toml` pins the compiler and the `i686-pc-windows-gnu`
+target), `curl`, and the `i686-w64-mingw32-gcc` cross-linker.
+
+```sh
+make build WAD_SIMULATOR=/path/to/mercs2-wad-simulator VERSION=0.4.0
+```
+
+That writes `build/m2-sdk.dll`, `build/libm2-sdk.dll.a` and `build/load_ladder.gen.h`; without
+`VERSION` the DLL reports 0.0.0. The crate's `scripts/fetch_mingw_libs.sh` fetches the `rust-mingw`
+component matching the pinned rustc (sha256-checked against static.rust-lang.org) and the DLL links
+against it rather than the host MinGW's libraries, so it imports `msvcrt.dll` whatever CRT the host
+MinGW defaults to. CI and the release build from the mercs2-wad-simulator commit pinned in
+[`.github/wad-simulator-ref`](.github/wad-simulator-ref).
 
 ## Why one instance and not a copy per mod
 
@@ -125,16 +150,16 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD reason, LPVOID r) {
 }
 ```
 
-Link with `$(M2_LDFLAGS)`, **not** `$(M2_SRCS)`. `M2_SRCS` still exists so the SDK can build itself;
-a mod that compiles it in gets a second private MinHook and a second log-stub hook, which is exactly
-what this design exists to prevent.
+Link with `$(M2_LDFLAGS)`. Nothing of the SDK is compiled into a mod: a second private MinHook or a
+second log-stub hook is exactly what this design exists to prevent.
 
 [`test/consumer`](test/consumer/) is a complete minimal consumer, and `make -C test/consumer verify`
 asserts the built `.asi` really imports `m2-sdk.dll` — compiling proves the headers agree, but only
 the import table proves the binding.
 
-[`test/shader_core`](test/shader_core/) tests the shader registry's platform-independent core with
-the host compiler: `make -C test/shader_core check`.
+[`test/runtime`](test/runtime/) calls every export that runs outside the game under Wine and prints
+the results; `make -C test/runtime compare WINE=... BASELINE_DLL=...` diffs that output, and the
+`m2_logf` lines it writes, byte for byte against another build of the DLL, such as a release.
 
 ## Registering shaders
 
@@ -219,20 +244,12 @@ pixel entry share the entry's outcome.
 
 ## The world-load ladder (generated)
 
-[`m2/load_ladder.gen.h`](m2/load_ladder.gen.h) and `load_ladder.gen.c` are generated from
-loadprobe's `phases.rs` by [`gen_ladder.py`](gen_ladder.py) — **do not edit them by hand**. The
-header carries the constants a mod uses; the table itself is compiled into the DLL, because a
-`static` array in a header is duplicated into every consumer and cannot be exported.
-
-```sh
-make ladder        # regenerate from a sibling loadprobe checkout
-make ladder-check  # drift guard: fail if either file is stale
-make ladder PHASES=/path/to/phases.rs   # if loadprobe lives elsewhere
-```
-
-CI runs `ladder-check` against `mercs2-wad-simulator`'s `crates/loadprobe`. It has to: the drift is
-**silent in the game** — `m2_loadtrigger` simply stops matching any milestone loadprobe has renamed,
-and no mod reports anything.
+The DLL matches the log against `loadprobe::phases::LADDER`, and the crate's build writes the C header
+for that ladder beside the import library. [`m2/load_ladder.gen.h`](m2/load_ladder.gen.h) is that
+header — **do not edit it by hand**. `make build` fails when the committed copy differs from the one
+the build wrote, and `make ladder` replaces it. The drift is **silent in the game** otherwise:
+`m2_loadtrigger` would stop matching any milestone loadprobe has renamed, and no mod would report
+anything.
 
 ## Target
 
@@ -244,5 +261,5 @@ the addresses in `m2_target.h` are binary-specific. For that build
 ⚠ `m2_version.h` versions the **SDK**, not the game it targets. Those are separate axes: an SDK
 release can change without the target build changing, and vice versa.
 
-MinHook is vendored under [`minhook/`](minhook/) (32-bit sources only) and carries its own
-[license](minhook/LICENSE.txt); the SDK itself is [MIT](LICENSE).
+MinHook is compiled into the DLL from the 32-bit sources vendored in `crates/mercs2_mod_runtime/minhook`
+and carries its own [license](LICENSE-MinHook.txt); the SDK itself is [MIT](LICENSE).
