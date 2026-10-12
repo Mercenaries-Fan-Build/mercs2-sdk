@@ -4,7 +4,7 @@
  *
  * Checks: the version and per-module log; m2_module_path; the shader registry (two new entries that
  * load retail .sho files, which must register, and two that reuse a retail shader name, which the
- * registry must refuse as DUPLICATE); a log-stream listener; a load trigger on the world being fully
+ * registry must refuse as DUPLICATE); a log-stream listener, paused once the world is loaded; a load trigger on the world being fully
  * loaded, which reads back every shader outcome; the Lua host (a namespace, chunks run on the first
  * captured state, the tick).
  */
@@ -125,6 +125,8 @@ static void OnWorldLoaded(int reached, void* ud) {
     Outcome("PgMeshVP", M2_SHADER_ERR_DUPLICATE);
     m2_logf("log lines seen by the listener: %d", (int)g_lines);
     Check(g_lines > 0, "the log-stream listener received lines");
+    Check(m2_loghook_set_active(OnLine, NULL, 0), "m2_loghook_set_active pauses the listener");
+    Check(!m2_loghook_set_active(OnLine, (void*)1, 0), "m2_loghook_set_active refuses an unknown listener");
     m2_logf("Lua ticks: %d", (int)g_ticks);
     Check(g_ticks > 0, "the Lua tick ran");
     Check(g_ran == 1, "chunks ran on a captured state");
