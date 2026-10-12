@@ -45,7 +45,7 @@ jobs:
           set -euo pipefail
           file build/m2-sdk.dll | grep -q "PE32 .*80386" \
             || { echo "::error::m2-sdk.dll is not a 32-bit PE"; exit 1; }
-          for sym in m2_hook_attach m2_logf_mod m2_loghook_add_listener \
+          for sym in m2_hook_attach m2_logf_mod m2_loghook_add_listener m2_loghook_set_active \
                      m2_loadtrigger_on_phase m2_version_num \
                      m2_shader_add_pixel m2_shader_add_vertex m2_shader_outcome \
                      m2_shader_status_name; do
