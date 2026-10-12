@@ -1,7 +1,6 @@
 /* m2_shader_types.h — the value types of the shader registry (m2_shader.h).
  *
- * Plain C with no Windows dependency, so the registry's validation core (m2_shader_core.c) builds
- * and tests on any host. Mods include m2_shader.h, which includes this.
+ * Plain C with no Windows dependency. Mods include m2_shader.h, which includes this.
  */
 #ifndef M2_SHADER_TYPES_H
 #define M2_SHADER_TYPES_H
