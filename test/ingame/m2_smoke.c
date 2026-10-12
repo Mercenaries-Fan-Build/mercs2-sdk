@@ -5,7 +5,8 @@
  * Checks: the version and per-module log; m2_module_path; the shader registry (two new entries that
  * load retail .sho files, which must register, and two that reuse a retail shader name, which the
  * registry must refuse as DUPLICATE); a log-stream listener; a load trigger on the world being fully
- * loaded, which reads back every shader outcome.
+ * loaded, which reads back every shader outcome; the Lua host (a namespace, chunks run on the first
+ * captured state, the tick).
  */
 #include "m2.h"
 
@@ -29,6 +30,8 @@ static const m2_shader_class kDupPixel[4] = {
 static const m2_shader_class kDupVertex = { "PgMeshVP", "PgMeshVP.sho" };
 
 static volatile LONG g_lines = 0;
+static volatile LONG g_ticks = 0;
+static volatile LONG g_ran = 0;
 static int g_failures = 0;
 
 static void Check(int ok, const char* what) {
@@ -50,6 +53,66 @@ static void OnLine(const char* msg, void* ud) {
     InterlockedIncrement(&g_lines);
 }
 
+static int SmokeHello(void* L) {
+    m2_lua_push_string(L, "hi", -1);
+    m2_lua_push_number(L, 2.5);
+    return 2;
+}
+
+static int SmokeFail(void* L) {
+    m2_lua_raise(L, "smoke failure");
+    return 0;
+}
+
+static const m2_lua_reg kSmokeLib[] = {
+    { "Hello", SmokeHello },
+    { "Fail", SmokeFail },
+    { NULL, NULL },
+};
+
+static void Exec(void* L, const char* chunk, int want_status, const char* want_out) {
+    char out[512];
+    char line[768];
+    int st = m2_lua_exec(L, chunk, lstrlenA(chunk), out, sizeof(out));
+    wsprintfA(line, "m2_lua_exec(%s) = %d \"%s\", expected %d \"%s\"", chunk, st, out, want_status, want_out);
+    Check(st == want_status && lstrcmpA(out, want_out) == 0, line);
+}
+
+static void OnState(void* L, int is_new_cycle, void* ud) {
+    (void)ud;
+    m2_logf("state captured: L=%p new=%d", L, is_new_cycle);
+    if (InterlockedCompareExchange(&g_ran, 1, 0) != 0) return;
+    Exec(L, "return M2Smoke.Hello() == \"hi\", type(1), 1 + 1", 0, "[ok]\ttrue\t\"number\"\t2");
+    Exec(L, "return select(2, M2Smoke.Hello())", 0, "[ok]\t2.5");
+    Exec(L, "local ok, e = pcall(M2Smoke.Fail) return ok, e", 0, "[ok]\tfalse\t\"smoke failure\"");
+    Exec(L, "return (", 1, "[compile] \"[string \"return (\"]:1: unexpected symbol near '<eof>'\"");
+    Exec(L, "error(\"boom\", 0)", 2, "[runtime] \"boom\"");
+    Check(!m2_lua_in_exec(), "m2_lua_in_exec is 0 outside a chunk");
+}
+
+static void OnTick(void* L, void* ud) {
+    (void)L;
+    (void)ud;
+    InterlockedIncrement(&g_ticks);
+}
+
+static DWORD WINAPI LuaThread(LPVOID p) {
+    (void)p;
+    m2_logf("installing the Lua host");
+    if (!m2_lua_install()) {
+        const char* e = m2_lua_last_error();
+        m2_logf("FAIL: m2_lua_install: %s", e ? e : "(no message)");
+        g_failures++;
+        return 0;
+    }
+    Check(1, "m2_lua_install");
+    Check(m2_lua_add_namespace("M2Smoke", kSmokeLib), "m2_lua_add_namespace(M2Smoke)");
+    Check(!m2_lua_add_namespace("M2Smoke", kSmokeLib), "a second M2Smoke is refused");
+    Check(m2_lua_on_state(OnState, NULL), "m2_lua_on_state");
+    Check(m2_lua_on_tick(OnTick, NULL), "m2_lua_on_tick");
+    return 0;
+}
+
 static void OnWorldLoaded(int reached, void* ud) {
     (void)ud;
     m2_logf("world loaded: phase %d (%s)", reached, m2_loadtrigger_phase_name(reached));
@@ -62,6 +125,9 @@ static void OnWorldLoaded(int reached, void* ud) {
     Outcome("PgMeshVP", M2_SHADER_ERR_DUPLICATE);
     m2_logf("log lines seen by the listener: %d", (int)g_lines);
     Check(g_lines > 0, "the log-stream listener received lines");
+    m2_logf("Lua ticks: %d", (int)g_ticks);
+    Check(g_ticks > 0, "the Lua tick ran");
+    Check(g_ran == 1, "chunks ran on a captured state");
     m2_logf("done: %d failure(s)", g_failures);
 }
 
@@ -95,6 +161,7 @@ BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
     Check(m2_loadtrigger_on_phase(M2_PHASE_REACHED_WORLD_IDX, OnWorldLoaded, NULL),
           "m2_loadtrigger_on_phase");
     Check(m2_loadtrigger_install(), "m2_loadtrigger_install");
+    Check(CreateThread(NULL, 0, LuaThread, NULL, 0, NULL) != NULL, "the Lua thread started");
     m2_logf("DllMain done; waiting for the world to load");
     return TRUE;
 }
