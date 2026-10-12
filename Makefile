@@ -1,67 +1,51 @@
-# Builds m2-sdk.dll — the one shared m2 layer every mod links against — plus the import library
-# their linkers bind to.
+# Builds m2-sdk.dll and its import library from mercs2_mod_runtime, the crate in a mercs2-wad-simulator
+# checkout, into build/, and checks m2/load_ladder.gen.h against the header that build writes.
+#
+#   make build WAD_SIMULATOR=/path/to/mercs2-wad-simulator VERSION=0.4.0
 #
 # 32-bit only. Mercenaries 2 is a 32-bit process, so there is no other target worth having.
 
-CC_MINGW ?= i686-w64-mingw32-gcc
+TARGET   := i686-pc-windows-gnu
 BUILDDIR := build
-OBJDIR   := $(BUILDDIR)/obj
+DLL      := $(BUILDDIR)/m2-sdk.dll
+IMPLIB   := $(BUILDDIR)/libm2-sdk.dll.a
+HEADER   := $(BUILDDIR)/load_ladder.gen.h
+RUNTIME   = $(WAD_SIMULATOR)/crates/mercs2_mod_runtime
 
-include sdk.mk
+# The release pipeline passes the tag without its `v`. A build without VERSION reports 0.0.0, a version
+# no release carries. manifest.yaml carries the same version by hand, and the release workflow refuses
+# to publish when the two differ.
+VERSION ?= 0.0.0
 
-DLL    := $(BUILDDIR)/m2-sdk.dll
-IMPLIB := $(BUILDDIR)/libm2-sdk.dll.a
-OBJS   := $(patsubst %.c,$(OBJDIR)/%.o,$(subst /,_,$(M2_SRCS)))
-
-# The release pipeline injects the version from the git tag: `make build VERSION=0.0.2` (the
-# workflow passes VERSION=${tag#v}). A bare `make build` leaves m2_version.h's 0.0.0 dev default.
-# The tag injects the DLL's version. manifest.yaml carries the same version by hand, and the release
-# workflow refuses to publish when the two differ.
-ifdef VERSION
-  VERSION_DEFS := \
-    -DM2_VERSION_MAJOR=$(word 1,$(subst ., ,$(VERSION))) \
-    -DM2_VERSION_MINOR=$(word 2,$(subst ., ,$(VERSION))) \
-    -DM2_VERSION_PATCH=$(word 3,$(subst ., ,$(VERSION)))
-endif
-
-# M2_BUILDING_DLL flips M2_API from dllimport to dllexport (see m2/m2_api.h).
-CFLAGS  := -O2 -Wall -DM2_BUILDING_DLL $(M2_CFLAGS) $(VERSION_DEFS)
-LDFLAGS := -shared -static-libgcc -lkernel32 -luser32
-
-.PHONY: all build ladder ladder-check clean help
+.PHONY: all build ladder clean help require-wad-simulator
 
 all: build
-build: $(DLL)
 
-$(DLL): $(M2_SRCS)
-	@mkdir -p $(OBJDIR)
-	@for src in $(M2_SRCS); do \
-		obj=$(OBJDIR)/$$(echo $$src | sed 's|^\./||; s|/|_|g; s|\.c$$|.o|'); \
-		echo "  CC $$src"; \
-		$(CC_MINGW) $(CFLAGS) -c "$$src" -o "$$obj" || exit 1; \
-	done
-	@echo "  LD $(DLL)"
-	@$(CC_MINGW) $(OBJDIR)/*.o -o $(DLL) $(LDFLAGS) -Wl,--out-implib,$(IMPLIB)
+require-wad-simulator:
+	@test -n "$(WAD_SIMULATOR)" || { echo "error: set WAD_SIMULATOR=/path/to/mercs2-wad-simulator" >&2; exit 1; }
+	@test -f "$(RUNTIME)/Cargo.toml" || { echo "error: $(RUNTIME)/Cargo.toml not found" >&2; exit 1; }
+
+# cargo reads rust-toolchain.toml and .cargo/config.toml from the directory it runs in, so the build
+# runs inside the crate. scripts/fetch_mingw_libs.sh places the rust-mingw libraries the link uses.
+build: require-wad-simulator
+	@mkdir -p $(BUILDDIR)
+	rm -f $(DLL) $(IMPLIB) $(HEADER)
+	cd "$(RUNTIME)" && bash scripts/fetch_mingw_libs.sh
+	cd "$(RUNTIME)" && M2_VERSION=$(VERSION) M2_IMPLIB=$(abspath $(IMPLIB)) cargo build --release --target $(TARGET)
+	cp "$(RUNTIME)/target/$(TARGET)/release/mercs2_mod_runtime.dll" $(DLL)
+	@test -f $(IMPLIB) || { echo "error: $(IMPLIB) was not written by the link" >&2; exit 1; }
+	@test -f $(HEADER) || { echo "error: $(HEADER) was not written by the build" >&2; exit 1; }
+	@cmp -s $(HEADER) m2/load_ladder.gen.h || { echo "error: m2/load_ladder.gen.h differs from the DLL's ladder ($(HEADER)); run 'make ladder'" >&2; exit 1; }
 	@echo "built $(DLL) + $(IMPLIB)"
 
-# Regenerate m2/load_ladder.gen.{h,c} from loadprobe's phases.rs. Override with
-# PHASES=/path/to/phases.rs if loadprobe is not in one of the known sibling layouts.
+# Replace m2/load_ladder.gen.h with the header the last build wrote.
 ladder:
-	python3 gen_ladder.py $(PHASES)
-
-# Drift guard: fail if either generated file no longer matches phases.rs.
-#
-# CI runs this. The guard existed for months without being wired to anything, which is the same as
-# not having it — and drift is silent: m2_loadtrigger would simply stop matching milestones that
-# loadprobe had renamed, with no error anywhere.
-ladder-check:
-	python3 gen_ladder.py $(PHASES) --check
+	@test -f $(HEADER) || { echo "error: $(HEADER) not found; run 'make build' first" >&2; exit 1; }
+	cp $(HEADER) m2/load_ladder.gen.h
 
 clean:
 	rm -rf $(BUILDDIR)
 
 help:
-	@echo "make build         — build m2-sdk.dll and its import library (i686 MinGW)"
-	@echo "make ladder        — regenerate m2/load_ladder.gen.{h,c} from loadprobe phases.rs"
-	@echo "make ladder-check  — verify the generated files match phases.rs (drift guard)"
-	@echo "  PHASES=/path/to/phases.rs to override the loadprobe source location"
+	@echo "make build WAD_SIMULATOR=... [VERSION=x.y.z]  build/m2-sdk.dll + build/libm2-sdk.dll.a"
+	@echo "make ladder                                   update m2/load_ladder.gen.h from the last build"
