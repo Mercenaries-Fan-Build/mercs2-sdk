@@ -28,6 +28,13 @@ typedef void (*m2_log_listener)(const char* msg, void* ud);
  * before m2_loghook_install(). */
 M2_API int m2_loghook_add_listener(m2_log_listener cb, void* ud);
 
+/* Pause (active = 0) or resume a registered listener, found by cb and ud.
+ * Returns 1 when it was found, 0 otherwise. Listeners start active. A paused
+ * listener gets no lines; while every listener is paused, the stub source does
+ * not build the message, so a mod that only needs lines during a load costs
+ * nothing during gameplay. Safe to call from inside the listener. */
+M2_API int m2_loghook_set_active(m2_log_listener cb, void* ud, int active);
+
 /* MinHook the log stub and begin dispatching. Idempotent. Returns 1 on success. */
 M2_API int m2_loghook_install(void);
 
