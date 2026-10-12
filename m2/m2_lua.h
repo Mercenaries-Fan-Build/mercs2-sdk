@@ -59,6 +59,10 @@ M2_API int m2_lua_on_tick(m2_lua_tick_cb cb, void* ud);
  * thread with the L of a state/tick callback or of a running Lua C function. */
 M2_API int m2_lua_exec(void* L, const char* chunk, int len, char* out, int cap);
 
+/* 1 when L is a usable lua_State right now (the check m2_lua_exec makes before running), else 0. A
+ * tick's L can be a state that has since ended: check it before taking work off a queue for it. */
+M2_API int m2_lua_state_ok(void* L);
+
 /* 1 while m2_lua_exec runs on this thread. */
 M2_API int m2_lua_in_exec(void);
 
