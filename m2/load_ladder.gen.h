@@ -1,5 +1,5 @@
-/* AUTO-GENERATED from loadprobe by gen_ladder.py — DO NOT EDIT. */
-/* Source of truth: loadprobe/src/phases.rs */
+/* Generated from loadprobe::phases::LADDER by mercs2_mod_runtime's build, which writes it beside
+ * libm2-sdk.dll.a. Do not edit: the m2-sdk Shipment's build fails when this copy differs. */
 #ifndef M2_LOAD_LADDER_GEN_H
 #define M2_LOAD_LADDER_GEN_H
 
@@ -14,10 +14,7 @@ typedef struct {
     int match_count;
 } M2LoadPhase;
 
-/* The table itself lives in the DLL (load_ladder.gen.c), not here. Defined in a
- * header it would be duplicated into every consumer's translation unit — and a
- * `static` array cannot be exported, so the shared layer could not own it. Mods use
- * the M2_PHASE_* constants above; only m2_loadtrigger reads the table. */
-extern const M2LoadPhase k_m2_ladder[M2_LADDER_COUNT];
+/* The table itself lives in the DLL and is not exported. Mods use the M2_PHASE_* constants above and
+ * m2_loadtrigger_phase_name. */
 
 #endif /* M2_LOAD_LADDER_GEN_H */
