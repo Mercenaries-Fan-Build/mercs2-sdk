@@ -5,14 +5,6 @@ name: Release
 # The Shipment (m2-sdk-v<version>.zip) is how players get m2-sdk.dll: it places the DLL in the game
 # root, where every .asi that imports it finds it. `libm2-sdk.dll.a` is what a mod's linker binds
 # against if it is not building the DLL itself, and the headers are what it compiles against.
-#
-# Two triggers:
-#   * workflow_dispatch with a version: stamps shipment.version in manifest.yaml on the default branch,
-#     builds and checks everything, then commits the stamp, tags v<version> and creates the release.
-#   * a pushed v* tag: the committed manifest.yaml must already carry the tagged version, or the
-#     release stops.
-# Either way the version is injected into the DLL, and the release is created in one step with every
-# asset attached; nothing is uploaded after that.
 
 on:
   workflow_dispatch:
