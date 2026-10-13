@@ -11,10 +11,14 @@ name: Release
 # release is created in one step with every asset attached, and nothing is uploaded after that.
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, X.Y.Z (no leading v)"
+        required: true
   push:
     tags:
-      - 'v*'
-
+      - "v*"
 permissions:
   contents: write
 
