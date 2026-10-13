@@ -75,34 +75,16 @@ jobs:
             exit 1
           fi
 
-      # m2-sdk.dll is built from crates/mercs2_mod_runtime in mercs2-wad-simulator, at the commit pinned in
-      # .github/wad-simulator-ref. The crate's rust-toolchain.toml pins rustc; rustup installs it on the
-      # first cargo call.
-      - name: Read the pinned mercs2-wad-simulator commit
-        id: wadsim
-        run: |
-          set -euo pipefail
-          test -f .github/wad-simulator-ref \
-            || { echo "::error::.github/wad-simulator-ref is missing: it pins the mercs2-wad-simulator commit the DLL is built from"; exit 1; }
-          ref="$(tr -d '[:space:]' < .github/wad-simulator-ref)"
-          [[ "$ref" =~ ^[0-9a-f]{40}$ ]] \
-            || { echo "::error::.github/wad-simulator-ref holds '$ref', not a 40-character commit sha"; exit 1; }
-          echo "ref=$ref" >> "$GITHUB_OUTPUT"
-
-      - name: Check out mercs2-wad-simulator at the pinned commit
-        uses: actions/checkout@v4
-        with:
-          repository: Mercenaries-Fan-Build/mercs2-wad-simulator
-          ref: ${{ steps.wadsim.outputs.ref }}
-          path: .wad_simulator
-
       - name: Install the 32-bit MinGW cross-compiler
         run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-i686
 
-      # The tag is injected into the DLL: an untagged build reports 0.0.0, and a tag build passes the tag
-      # to the crate's build, so m2_version_num()/m2_version_string() match the tag.
+      # m2-sdk.dll is built from the mercs2_mod_runtime release the Makefile pins (RUNTIME_VERSION),
+      # downloaded from crates.io and checked against the sha256 the index records. The crate's
+      # rust-toolchain.toml pins rustc; rustup installs it on the first cargo call. The tag is injected
+      # into the DLL: an untagged build reports 0.0.0, and a tag build passes the tag to the crate's
+      # build, so m2_version_num()/m2_version_string() match the tag.
       - name: Build m2-sdk.dll (version injected from the tag)
-        run: make build WAD_SIMULATOR=.wad_simulator VERSION="${GITHUB_REF_NAME#v}"
+        run: make build VERSION="${GITHUB_REF_NAME#v}"
 
       - name: It is a 32-bit PE that carries the tagged version
         run: |
