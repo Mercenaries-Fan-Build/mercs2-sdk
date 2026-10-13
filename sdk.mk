@@ -8,7 +8,7 @@
 #
 # ⚠ The SDK is a SHARED DLL now, not a pile of sources compiled into your mod. Two consequences:
 #
-#   1. Link with $(M2_LDFLAGS). The DLL is built from wad_simulator's crates/mercs2_mod_runtime, and
+#   1. Link with $(M2_LDFLAGS). The DLL is built from the mercs2_mod_runtime crate, and
 #      nothing of it is compiled into a mod: a second private copy of MinHook or of the log-stub hook
 #      is exactly what the shared layer exists to prevent.
 #   2. `m2-sdk.dll` lives in the GAME ROOT, placed there by the m2-sdk Shipment; your Shipment

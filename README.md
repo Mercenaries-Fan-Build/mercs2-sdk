@@ -6,7 +6,7 @@
 ```sh
 git submodule add https://github.com/Mercenaries-Fan-Build/mercs2-sdk sdk
 git submodule update --init --recursive   # in an existing clone
-make -C sdk build WAD_SIMULATOR=/path/to/mercs2-wad-simulator   # sdk/build/m2-sdk.dll + import library
+make -C sdk build                         # sdk/build/m2-sdk.dll + import library
 ```
 
 Each release also attaches `m2-sdk.dll`, `libm2-sdk.dll.a` and the headers, for building a mod without
@@ -14,25 +14,29 @@ building the DLL.
 
 ## Building the DLL
 
-`m2-sdk.dll` is built from Rust: `crates/mercs2_mod_runtime` in
-[mercs2-wad-simulator](https://github.com/Mercenaries-Fan-Build/mercs2-wad-simulator) is the `cdylib`,
-and the logic it runs that needs no Windows (INI parsing, the Lua stack reader, the shader registry
-core, the load ladder) lives in `mercs2_formats`, where it is tested on any host. This repository is
-the Shipment: the C headers under `m2/` (the ABI), `sdk.mk`, the tests, and the release.
+`m2-sdk.dll` is built from Rust: the [`mercs2_mod_runtime`](https://crates.io/crates/mercs2_mod_runtime)
+crate is the `cdylib`, and the logic it runs that needs no Windows (INI parsing, the Lua stack reader,
+the shader registry core, the load ladder) lives in
+[`mercs2_formats`](https://crates.io/crates/mercs2_formats), where it is tested on any host. Both are
+developed in [mercs2-wad-simulator](https://github.com/Mercenaries-Fan-Build/mercs2-wad-simulator).
+This repository is the Shipment: the C headers under `m2/` (the ABI), `sdk.mk`, the tests, and the
+release.
 
 Needs `rustup` (the crate's `rust-toolchain.toml` pins the compiler and the `i686-pc-windows-gnu`
-target), `curl`, and the `i686-w64-mingw32-gcc` cross-linker.
+target), `curl`, `shasum`, and the `i686-w64-mingw32-gcc` cross-linker.
 
 ```sh
-make build WAD_SIMULATOR=/path/to/mercs2-wad-simulator VERSION=0.4.0
+make build VERSION=0.4.0
 ```
 
-That writes `build/m2-sdk.dll`, `build/libm2-sdk.dll.a` and `build/load_ladder.gen.h`; without
-`VERSION` the DLL reports 0.0.0. The crate's `scripts/fetch_mingw_libs.sh` fetches the `rust-mingw`
-component matching the pinned rustc (sha256-checked against static.rust-lang.org) and the DLL links
-against it rather than the host MinGW's libraries, so it imports `msvcrt.dll` whatever CRT the host
-MinGW defaults to. CI and the release build from the mercs2-wad-simulator commit pinned in
-[`.github/wad-simulator-ref`](.github/wad-simulator-ref).
+`scripts/fetch_runtime.sh` downloads the `mercs2_mod_runtime` release the Makefile pins
+(`RUNTIME_VERSION`) from crates.io, checks it against the sha256 the crates.io index records, and
+unpacks it under `build/`; the build runs inside it with `--locked`. That writes `build/m2-sdk.dll`,
+`build/libm2-sdk.dll.a` and `build/load_ladder.gen.h`; without `VERSION` the DLL reports 0.0.0. The
+crate's `scripts/fetch_mingw_libs.sh` fetches the `rust-mingw` component matching the pinned rustc
+(sha256-checked against static.rust-lang.org) and the DLL links against it rather than the host MinGW's
+libraries, so it imports `msvcrt.dll` whatever CRT the host MinGW defaults to. CI and the release run the
+same `make build`.
 
 ## Why one instance and not a copy per mod
 
@@ -261,5 +265,5 @@ the addresses in `m2_target.h` are binary-specific. For that build
 ⚠ `m2_version.h` versions the **SDK**, not the game it targets. Those are separate axes: an SDK
 release can change without the target build changing, and vice versa.
 
-MinHook is compiled into the DLL from the 32-bit sources vendored in `crates/mercs2_mod_runtime/minhook`
+MinHook is compiled into the DLL from the 32-bit sources vendored in the `mercs2_mod_runtime` crate's `minhook/`
 and carries its own [license](LICENSE-MinHook.txt); the SDK itself is [MIT](LICENSE).
