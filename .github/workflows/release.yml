@@ -6,9 +6,13 @@ name: Release
 # root, where every .asi that imports it finds it. `libm2-sdk.dll.a` is what a mod's linker binds
 # against if it is not building the DLL itself, and the headers are what it compiles against.
 #
-# A `v*` tag push is the only trigger. The tag names the version, the build injects it into the DLL,
-# and the committed manifest.yaml must already carry the same version or the release stops. The
-# release is created in one step with every asset attached, and nothing is uploaded after that.
+# Two triggers:
+#   * workflow_dispatch with a version: stamps shipment.version in manifest.yaml on the default branch,
+#     builds and checks everything, then commits the stamp, tags v<version> and creates the release.
+#   * a pushed v* tag: the committed manifest.yaml must already carry the tagged version, or the
+#     release stops.
+# Either way the version is injected into the DLL, and the release is created in one step with every
+# asset attached; nothing is uploaded after that.
 
 on:
   workflow_dispatch:
@@ -19,6 +23,7 @@ on:
   push:
     tags:
       - "v*"
+
 permissions:
   contents: write
 
@@ -26,7 +31,33 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      # A dispatch releases the default branch's head; a tag push releases the tagged commit.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.repository.default_branch || github.ref }}
+          fetch-depth: 0
+
+      - name: The version and tag this run releases
+        id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="${INPUT_VERSION#v}"
+            if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null 2>&1; then
+              echo "::error::tag v$VERSION already exists. Pick a new version."
+              exit 1
+            fi
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          case "$VERSION" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::'$VERSION' is not an X.Y.Z version"; exit 1 ;;
+          esac
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
       # The qm version comes from .github/qm-version (shared with ci.yml). GitHub's recorded sha256 for
       # the asset is read BEFORE downloading, and the downloaded bytes must match it.
@@ -59,13 +90,22 @@ jobs:
           echo "qm $QM_VERSION verified: $got"
           chmod +x qm
 
-      # mercs.ink reads manifest.yaml from the repo at the release tag, so the COMMITTED manifest must
-      # already be at the tagged version. Nothing here commits or pushes, so a mismatch fails the release
-      # rather than being fixed up in the runner.
-      - name: manifest.yaml names m2-sdk at the tagged version
+      # Only on a dispatch: the first `version:` line is shipment.version (shipment: is the manifest's
+      # first block after `format:`). The stamp is committed after every check below has passed.
+      - name: Stamp shipment.version in manifest.yaml
+        if: github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
-          want="${GITHUB_REF_NAME#v}"
+          VERSION="${{ steps.v.outputs.version }}"
+          sed -i "0,/^[[:space:]]*version:/s/^\([[:space:]]*\)version:.*/\1version: $VERSION/" manifest.yaml
+
+      # mercs.ink reads manifest.yaml from the repo at the release tag, so the manifest at the tag must
+      # carry the released version. On a tag push nothing is committed, so a mismatch fails the release
+      # rather than being fixed up in the runner.
+      - name: manifest.yaml names m2-sdk at the released version
+        run: |
+          set -euo pipefail
+          want="${{ steps.v.outputs.version }}"
           info="$(./qm manifest-info manifest.yaml)"
           echo "$info"
           name="$(jq -r .name <<< "$info")"
@@ -75,7 +115,7 @@ jobs:
             exit 1
           fi
           if [ "$version" != "$want" ]; then
-            echo "::error::the tag is $GITHUB_REF_NAME but manifest.yaml's shipment.version is '$version'. Commit manifest.yaml at $want and tag again."
+            echo "::error::the release is $want but manifest.yaml's shipment.version is '$version'. Commit manifest.yaml at $want and tag again, or release through the workflow dispatch."
             exit 1
           fi
 
@@ -84,18 +124,18 @@ jobs:
 
       # m2-sdk.dll is built from the mercs2_mod_runtime release the Makefile pins (RUNTIME_VERSION),
       # downloaded from crates.io and checked against the sha256 the index records. The crate's
-      # rust-toolchain.toml pins rustc; rustup installs it on the first cargo call. The tag is injected
-      # into the DLL: an untagged build reports 0.0.0, and a tag build passes the tag to the crate's
-      # build, so m2_version_num()/m2_version_string() match the tag.
-      - name: Build m2-sdk.dll (version injected from the tag)
-        run: make build VERSION="${GITHUB_REF_NAME#v}"
+      # rust-toolchain.toml pins rustc; rustup installs it on the first cargo call. The released version
+      # is injected into the DLL, so m2_version_num()/m2_version_string() match it; an untagged build
+      # reports 0.0.0.
+      - name: Build m2-sdk.dll (the released version injected)
+        run: make build VERSION="${{ steps.v.outputs.version }}"
 
-      - name: It is a 32-bit PE that carries the tagged version
+      - name: It is a 32-bit PE that carries the released version
         run: |
           set -euo pipefail
           file build/m2-sdk.dll | grep -q "PE32 .*80386" \
             || { echo "::error::m2-sdk.dll is not a 32-bit PE"; exit 1; }
-          want="${GITHUB_REF_NAME#v}"
+          want="${{ steps.v.outputs.version }}"
           strings build/m2-sdk.dll | grep -qF "$want" \
             || { echo "::error::m2-sdk.dll does not carry version $want"; exit 1; }
 
@@ -125,9 +165,10 @@ jobs:
       - name: Package the DLL, import library and headers
         run: |
           set -euo pipefail
+          TAG="${{ steps.v.outputs.tag }}"
           mkdir -p dist
           cp build/m2-sdk.dll build/libm2-sdk.dll.a dist/
-          zip -j "dist/m2-sdk-${GITHUB_REF_NAME}-headers.zip" m2/*.h
+          zip -j "dist/m2-sdk-${TAG}-headers.zip" m2/*.h
           ls -la dist
 
       # m2-sdk-v<version>.zip is the asset Modkit selects by exact name. It carries the manifest, the
@@ -135,7 +176,7 @@ jobs:
       - name: Package the Shipment zip
         run: |
           set -euo pipefail
-          ASSET="dist/m2-sdk-v${GITHUB_REF_NAME#v}.zip"
+          ASSET="dist/m2-sdk-${{ steps.v.outputs.tag }}.zip"
           rm -f "$ASSET"
           zip -r "$ASSET" manifest.yaml src LICENSE LICENSE-MinHook.txt
           # List first, then search the list: piping unzip straight into `grep -q` under pipefail can
@@ -149,12 +190,33 @@ jobs:
       - name: The Shipment's DLL is the released DLL
         run: |
           set -euo pipefail
-          ASSET="dist/m2-sdk-v${GITHUB_REF_NAME#v}.zip"
+          ASSET="dist/m2-sdk-${{ steps.v.outputs.tag }}.zip"
           rm -rf _zipcheck
           mkdir _zipcheck
           unzip -q "$ASSET" src/m2-sdk.dll -d _zipcheck
           cmp _zipcheck/src/m2-sdk.dll dist/m2-sdk.dll
           echo "the Shipment's src/m2-sdk.dll matches dist/m2-sdk.dll"
+
+      # Only on a dispatch, and only after every check above: commit the stamp to the default branch
+      # (when the manifest was not already at this version) and push the tag on that commit.
+      - name: Commit the stamp and tag it
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.v.outputs.version }}"
+          TAG="${{ steps.v.outputs.tag }}"
+          BRANCH="${{ github.event.repository.default_branch }}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- manifest.yaml; then
+            echo "manifest.yaml is already at $VERSION; tagging the current commit"
+          else
+            git add manifest.yaml
+            git commit -m "manifest.yaml: version $VERSION for release $TAG"
+            git push origin "HEAD:$BRANCH"
+          fi
+          git tag "$TAG"
+          git push origin "$TAG"
 
       # One step creates the release with every asset attached; nothing is uploaded after it is
       # published.
@@ -163,9 +225,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release create "$GITHUB_REF_NAME" \
+          TAG="${{ steps.v.outputs.tag }}"
+          gh release create "$TAG" \
             dist/m2-sdk.dll \
             dist/libm2-sdk.dll.a \
-            "dist/m2-sdk-${GITHUB_REF_NAME}-headers.zip" \
-            "dist/m2-sdk-v${GITHUB_REF_NAME#v}.zip" \
-            --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+            "dist/m2-sdk-${TAG}-headers.zip" \
+            "dist/m2-sdk-${TAG}.zip" \
+            --verify-tag --title "$TAG" --generate-notes
