@@ -260,7 +260,14 @@ anything.
 Built for the cracked retail EXE (`53,482,288` bytes, sha256 `958eb227…`, image base `0x00400000`);
 the addresses in `m2_target.h` are binary-specific. For that build
 `file_offset == VA - 0x400000` holds across all 13 sections — do **not** assume that for retail v1.1
-(`53,944,080` bytes), whose SecuROM sections differ.
+(`53,944,080` bytes, sha256 `7a348847…`), whose SecuROM sections differ.
+
+The cracked target is catalogued as `v10-cracked-pmcbb` in
+[`builds.tsv`](../../tools/wad_simulator/crates/mercs2_exemap/data/builds.tsv); see
+[`docs/reverse_engineer/pc_exe_build_fingerprints.md`](../../docs/reverse_engineer/pc_exe_build_fingerprints.md)
+for the full version-ID discriminator spec (the shipping cracked exe is v1.1-derived with
+v1.0-shape bytes restored at SecuROM-touched addresses, so pmc_bb offsets must be verified
+against this exact sha256 — the `v10` prefix in the build_id is a historical misnomer).
 
 ⚠ `m2_version.h` versions the **SDK**, not the game it targets. Those are separate axes: an SDK
 release can change without the target build changing, and vice versa.
