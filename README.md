@@ -32,7 +32,9 @@ make build VERSION=0.4.0
 `scripts/fetch_runtime.sh` downloads the `mercs2_mod_runtime` release the Makefile pins
 (`RUNTIME_VERSION`) from crates.io, checks it against the sha256 the crates.io index records, and
 unpacks it under `build/`; the build runs inside it with `--locked`. That writes `build/m2-sdk.dll`,
-`build/libm2-sdk.dll.a` and `build/load_ladder.gen.h`; without `VERSION` the DLL reports 0.0.0. The
+`build/libm2-sdk.dll.a` and `build/load_ladder.gen.h`; without `VERSION` the DLL reports 0.0.0, and
+`m2_abi_ok()` in a mod built against released headers refuses it (see
+[the version guard](#the-version-a-mod-compiles-against)). The
 crate's `scripts/fetch_mingw_libs.sh` fetches the `rust-mingw` component matching the pinned rustc
 (sha256-checked against static.rust-lang.org) and the DLL links against it rather than the host MinGW's
 libraries, so it imports `msvcrt.dll` whatever CRT the host MinGW defaults to. CI and the release run the
@@ -78,7 +80,27 @@ if (!m2_abi_ok()) return FALSE;   /* refuse to load rather than misbehave */
 
 The loader binds imports by **name only**, so a changed signature links happily and corrupts the
 stack with no diagnostic. `m2_abi_ok()` compares the header's `M2_VERSION_NUM` against the DLL's
-`m2_version_num()`.
+`m2_version_num()`: it accepts a DLL with the same MAJOR and a number at least the header's.
+
+### The version a mod compiles against
+
+`M2_VERSION_NUM` is the SDK release the headers belong to, `manifest.yaml`'s `shipment.version`, and
+`m2/m2_version.h` has no default for it:
+
+- **Through `sdk.mk`** (the submodule): `sdk.mk` reads `shipment.version` from `manifest.yaml` and
+  passes `-DM2_VERSION_MAJOR/MINOR/PATCH` in `$(M2_CFLAGS)`. A `manifest.yaml` that is missing or
+  holds anything but `MAJOR.MINOR.PATCH` stops the make.
+- **From a release's `m2-sdk-v<version>-headers.zip`**: the release writes the three defines into
+  the zipped `m2_version.h` (`scripts/stamp_version_header.sh`), so the headers alone compile the
+  released version.
+- **With neither**, the compile stops at
+  `#error "m2_version.h: no SDK version. ..."`. A 0.0.0 header would make `M2_VERSION_NUM` 0, and
+  `m2_abi_ok()` would accept every 0.x DLL.
+
+The DLL's own version is separate: `make build VERSION=x.y.z` passes it to the runtime build, and the
+release passes the released version. A local `make build` without `VERSION` reports 0.0.0, so a mod
+built against released (or submodule) headers refuses that DLL in `m2_abi_ok()`. To run such a mod
+against a DLL you built, build it with `VERSION=` set to `manifest.yaml`'s version.
 
 ## The m2-sdk Shipment
 
@@ -163,6 +185,11 @@ second log-stub hook is exactly what this design exists to prevent.
 [`test/consumer`](test/consumer/) is a complete minimal consumer, and `make -C test/consumer verify`
 asserts the built `.asi` really imports `m2-sdk.dll` — compiling proves the headers agree, but only
 the import table proves the binding.
+
+[`test/version`](test/version/) needs only the MinGW compiler, no DLL: `make -C test/version` checks
+that `$(M2_CFLAGS)` compiles `manifest.yaml`'s version, that the release's stamped headers compile it
+with no flags, that the `m2/` headers with no version stop at the `#error`, and that the stamp refuses
+a malformed version.
 
 [`test/runtime`](test/runtime/) calls every export that runs outside the game under Wine and prints
 the results; `make -C test/runtime compare WINE=... BASELINE_DLL=...` diffs that output, and the
