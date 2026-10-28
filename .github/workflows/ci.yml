@@ -13,6 +13,12 @@ jobs:
       - name: Install the 32-bit MinGW cross-compiler
         run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-i686
 
+      # Compile-only, before the DLL exists: a mod built through sdk.mk compiles manifest.yaml's
+      # version, the release's stamped headers compile it alone, and the m2/ headers with no version
+      # stop at the #error rather than compiling a 0.0.0 that m2_abi_ok() would match to every 0.x DLL.
+      - name: Mods compile the SDK version their headers belong to
+        run: make -C test/version
+
       # m2-sdk.dll is built from the mercs2_mod_runtime release the Makefile pins (RUNTIME_VERSION),
       # downloaded from crates.io and checked against the sha256 the index records. The crate's
       # rust-toolchain.toml pins rustc; rustup installs it on the first cargo call. Mercenaries 2 is a
