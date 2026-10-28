@@ -2,8 +2,9 @@
 # binary is the thing consumers accidentally bind against instead of the one they just built.
 build/
 
-# Consumer smoke-test output.
-test/consumer/*.asi
+# .asi plugins are never committed, anywhere in the tree: the release pipeline is their only
+# delivery. This covers the test builds (test/consumer/consumer.asi, test/ingame/m2_smoke.asi).
+*.asi
 
 # Runtime parity test output (test/runtime).
 test/runtime/runtime.exe
@@ -15,6 +16,3 @@ Thumbs.db
 # The Shipment's staged runtime DLL: manifest.yaml declares src/m2-sdk.dll, which is a copy of
 # build/m2-sdk.dll made after `make build` (by CI, by the release, or by hand before running qm).
 /src/
-
-# In-game smoke test output (test/ingame).
-test/ingame/m2_smoke.asi
