@@ -153,14 +153,20 @@ jobs:
       - name: Lint the Shipment before releasing it
         run: ./qm lint .
 
-      # Headers too: a mod author who is not using the submodule needs them to compile at all.
+      # Headers too: a mod author who is not using the submodule needs them to compile at all. That mod
+      # has no sdk.mk and no manifest.yaml, so the zipped m2_version.h carries the released version as
+      # defines, and the zipped headers alone must compile it before they are released.
       - name: Package the DLL, import library and headers
         run: |
           set -euo pipefail
+          VERSION="${{ steps.v.outputs.version }}"
           TAG="${{ steps.v.outputs.tag }}"
           mkdir -p dist
           cp build/m2-sdk.dll build/libm2-sdk.dll.a dist/
-          zip -j "dist/m2-sdk-${TAG}-headers.zip" m2/*.h
+          rm -rf dist/headers
+          bash scripts/stamp_version_header.sh "$VERSION" m2 dist/headers
+          make -C test/version headers HEADERS="$PWD/dist/headers" EXPECT_VERSION="$VERSION"
+          zip -j "dist/m2-sdk-${TAG}-headers.zip" dist/headers/*.h
           ls -la dist
 
       # m2-sdk-v<version>.zip is the asset Modkit selects by exact name. It carries the manifest, the
