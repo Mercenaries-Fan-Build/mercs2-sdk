@@ -7,8 +7,8 @@
 
 typedef enum m2_shader_status {
     M2_SHADER_OK = 0,
-    /* A function the registry calls or hooks does not start with the expected bytes: this is not
-     * the EXE build m2_target.h describes. */
+    /* A function the registry calls or hooks, the shader pool, ShaderLevel or a family vtable was
+     * not found in the running image by signature and structure; m2-sdk.log names which. */
     M2_SHADER_ERR_SIGNATURE,
     /* MinHook could not install the detour on FUN_0084f130. */
     M2_SHADER_ERR_HOOK,
