@@ -39,7 +39,8 @@
  * Writes through EAX and clobbers ECX only. */
 #define M2_SHADER_VS_BASE_CTOR_VA   0x0085ADE0u
 
-/* The first 16 bytes of each function above. The shader registry checks them before hooking. */
+/* The first 16 bytes of each function above, in this EXE. The shader registry does not read them:
+ * it finds the functions by its own byte signatures. */
 #define M2_SHADER_REGISTER_ALL_PROLOGUE \
     { 0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF8, 0x53, 0x56, 0x68, 0x38, 0x7A, 0x97, 0x01, 0xB8, 0x3C, 0x34 }
 #define M2_SHADER_REGISTER_PROLOGUE \
