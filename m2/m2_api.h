@@ -18,7 +18,8 @@
  * ⚠ Consequence a consumer must plan for: `m2-sdk.dll` becomes a hard load-time dependency. If it
  * is absent or the wrong architecture, the mod does not load at all — `LoadLibrary` fails with
  * `0x8007007E` before any of the mod's code runs, so the mod cannot report the problem itself.
- * pmc_bb logs the failure as `[FAILED] <name> (error: 0x...)`. Ship the DLL alongside the mod.
+ * pmc_bb logs the failure as `[FAILED] <name> (error: 0x...)`. The m2-sdk Shipment places the DLL
+ * in the game root; a mod's Shipment requires m2-sdk rather than shipping its own copy.
  */
 #ifndef M2_API_H
 #define M2_API_H
