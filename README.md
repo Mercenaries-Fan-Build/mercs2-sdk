@@ -90,7 +90,9 @@ requires m2-sdk loads.
 A Shipment whose `.asi` links the SDK declares the dependency in its own manifest:
 
 ```yaml
-requires: [{ shipment: m2-sdk, version: "^0.2" }]
+load:
+  requires:
+    - { shipment: m2-sdk, version: "^0.4" }
 ```
 
 Each release attaches the Shipment as `m2-sdk-v<version>.zip`, beside `m2-sdk.dll`, the import
@@ -124,6 +126,7 @@ The qm release CI uses is pinned in [`.github/qm-version`](.github/qm-version).
 | [`m2_loghook.h`](m2/m2_loghook.h) | One subscription to the game's whole log stream. |
 | [`m2_loadtrigger.h`](m2/m2_loadtrigger.h) | Fire callbacks as the world load crosses loadprobe milestones. |
 | [`m2_shader.h`](m2/m2_shader.h) | Register new shaders in the game's own shader registry (the `shader-registry` capability). |
+| [`m2_lua.h`](m2/m2_lua.h) | The game's Lua, shared through one set of detours: add namespaces and callbacks (`m2_lua_install`, `m2_lua_add_namespace`). |
 
 **`.text` MinHook, never `.rdata`.** The cracked retail EXE tolerates code detours but anti-tampers
 registration-table writes — a `.rdata` slot patch crashed early init under SecuROM. `m2_hook` routes
@@ -232,7 +235,7 @@ does. A vertex entry carries one class, registered as class 0.
 | status | from | meaning |
 |---|---|---|
 | `M2_SHADER_OK` | all | queued, or (from `m2_shader_outcome`) registered |
-| `M2_SHADER_ERR_SIGNATURE` | add | `FUN_0084f130`, `FUN_0085ac90`, `FUN_0085ace0` or `FUN_0085ade0` does not start with the bytes in `m2_target.h`: a different EXE build |
+| `M2_SHADER_ERR_SIGNATURE` | add | `FUN_0084f130`, `FUN_0085ac90`, `FUN_0085ace0` or `FUN_0085ade0`, the shader pool, ShaderLevel or a family vtable was not found in the running image by signature and structure (`m2-sdk.log` names which) |
 | `M2_SHADER_ERR_HOOK` | add | MinHook could not install the detour |
 | `M2_SHADER_ERR_TOO_LATE` | add | the game has started its registry (a pool count is non-zero, or the detour has run) |
 | `M2_SHADER_ERR_ARGUMENT` | add, outcome | a null or empty name or sho, or a sho that does not end in `.sho` or is over 128 characters; from `m2_shader_outcome`, a name that was never queued or that the registry has not reached |
