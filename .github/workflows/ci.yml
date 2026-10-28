@@ -24,8 +24,11 @@ jobs:
       - name: It is a 32-bit PE with the exports consumers bind to
         run: |
           set -euo pipefail
-          file build/m2-sdk.dll | grep -q "PE32 .*80386" \
-            || { echo "::error::m2-sdk.dll is not a 32-bit PE"; exit 1; }
+          # objdump names the BFD format; file(1)'s wording changes between libmagic versions.
+          fmt="$(i686-w64-mingw32-objdump -f build/m2-sdk.dll 2>&1)" \
+            || { echo "::error::m2-sdk.dll is not a 32-bit PE: $fmt"; exit 1; }
+          grep -q "file format pei-i386" <<<"$fmt" \
+            || { echo "::error::m2-sdk.dll is not a 32-bit PE: $fmt"; exit 1; }
           for sym in m2_hook_attach m2_logf_mod m2_loghook_add_listener m2_loghook_set_active \
                      m2_loadtrigger_on_phase m2_version_num \
                      m2_shader_add_pixel m2_shader_add_vertex m2_shader_outcome \
