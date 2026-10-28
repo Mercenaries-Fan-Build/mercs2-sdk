@@ -8,7 +8,9 @@
  *     in-process log stream. No file, and it works in pmc_bb's default
  *     markers-only mode, so PMC_VERBOSE_LOG is not required.
  *   - Otherwise (an older pmc_bb, or none): we MinHook the shared no-op log stub
- *     (M2_LOG_STUB_VA) ourselves, chaining the trampoline. Every Lua print /
+ *     ourselves, chaining the trampoline. The stub is found in the running image
+ *     by name (the base library's `print`), not at a fixed address
+ *     (M2_LOG_STUB_VA is its address in the cracked retail EXE). Every Lua print /
  *     Debug.Printf / stripped subsystem log line funnels through it; string args
  *     are joined into a message. When pmc_bb hooked the stub first, the trampoline
  *     runs its detour, so pmc_bb keeps logging. pmc_blackbox.log is not followed:
