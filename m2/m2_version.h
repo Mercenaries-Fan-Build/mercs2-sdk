@@ -24,18 +24,30 @@
 
 #include "m2_api.h"
 
-/* The version is injected by the release pipeline from the git tag — see .github/workflows/
- * release.yml, which builds `make build VERSION=<tag without the v>`. These fallbacks are the
- * dev-build default: an un-tagged local build reports 0.0.0, a number no release ever carries.
- * Do NOT bump these by hand — the tag is the single source of truth and the pipeline bakes it in. */
-#ifndef M2_VERSION_MAJOR
-#define M2_VERSION_MAJOR 0
+/* Where each version comes from. The one source is manifest.yaml's shipment.version, which the
+ * release stamps from the version it releases and checks against the tag.
+ *
+ *   This header (M2_VERSION_MAJOR/MINOR/PATCH, what a mod compiles against):
+ *     - a mod built through sdk.mk: sdk.mk reads shipment.version from manifest.yaml and passes the
+ *       three as -D flags in $(M2_CFLAGS);
+ *     - the release's m2-sdk-v<version>-headers.zip: the release writes the three defines into its
+ *       copy of this file, in place of the M2_VERSION_STAMP line below
+ *       (scripts/stamp_version_header.sh).
+ *     With neither, the #error below stops the compile. There is no default: at 0.0.0
+ *     M2_VERSION_NUM is 0 and m2_abi_ok() accepts every 0.x DLL.
+ *
+ *   m2-sdk.dll (m2_version_num() / m2_version_string(), what the loaded DLL reports): `make build
+ *     VERSION=x.y.z` passes it to the mercs2_mod_runtime build as M2_VERSION, and the release
+ *     passes the released version. A build without VERSION reports 0.0.0, which m2_abi_ok() in a
+ *     mod built against released headers refuses.
+ *
+ * Do NOT write a version here by hand. */
+/* M2_VERSION_STAMP */
+#if !defined(M2_VERSION_MAJOR) || !defined(M2_VERSION_MINOR) || !defined(M2_VERSION_PATCH)
+#error "m2_version.h: no SDK version. Build through sdk.mk with $(M2_CFLAGS), or use the headers from a release's m2-sdk-v<version>-headers.zip."
 #endif
-#ifndef M2_VERSION_MINOR
-#define M2_VERSION_MINOR 0
-#endif
-#ifndef M2_VERSION_PATCH
-#define M2_VERSION_PATCH 0
+#if M2_VERSION_MINOR > 99 || M2_VERSION_PATCH > 99
+#error "m2_version.h: M2_VERSION_NUM packs MINOR and PATCH into two digits each"
 #endif
 
 #define M2_VERSION_AT_LEAST(maj, min, pat) ((maj) * 10000 + (min) * 100 + (pat))
