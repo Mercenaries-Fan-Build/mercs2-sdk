@@ -23,7 +23,7 @@ M2_API int m2_lua_nargs(void* L);
 M2_API int m2_lua_arg_string(void* L, int idx0, char* out, int out_max);
 
 /* Raw Lua type tag of argument `idx0`, or -1 if absent / the stack is invalid.
- * 0 nil · 1 boolean · 3 number · 4 string. */
+ * 0 nil · 1 boolean · 2 light userdata · 3 number · 4 string · 7 userdata. */
 M2_API int m2_lua_arg_type(void* L, int idx0);
 
 /* Read argument `idx0` as a number. Returns 1 on success, 0 if it is absent, not
@@ -42,6 +42,12 @@ M2_API int m2_lua_arg_number(void* L, int idx0, double* out);
  * from its VALUE: several cfuncs in this game treat an omitted argument as true
  * (Gui.ShowLoadingHints among them), so "absent" and "false" are not the same. */
 M2_API int m2_lua_arg_bool(void* L, int idx0, int* out);
+
+/* Read argument `idx0` as an object, the way the game's own bindings do (PC v1.1 FUN_0059FF40): a light
+ * userdata (tag 2) gives its value, which is the object's guid; a full userdata (tag 7) gives the address of
+ * its payload (the Udata + 0x18). Returns 1 on success, 0 for any other type, an absent argument or an
+ * invalid stack. */
+M2_API int m2_lua_arg_object(void* L, int idx0, unsigned int* out);
 
 /* Join every string-typed argument into `out`, tab-separated (mirrors how the
  * game's print/Debug.Printf line reads). Returns the count of string args joined,

@@ -25,7 +25,7 @@ verify: $(TARGET)
 		|| { echo "FAIL: $(TARGET) does not import m2-sdk.dll" >&2; exit 1; }
 	@i686-w64-mingw32-objdump -p $(TARGET) | grep -q "m2_loadtrigger_on_phase" \
 		|| { echo "FAIL: $(TARGET) does not import m2_loadtrigger_on_phase" >&2; exit 1; }
-	@for sym in m2_shader_add_pixel m2_shader_add_vertex m2_shader_outcome m2_shader_status_name; do \
+	@for sym in m2_shader_add_pixel m2_shader_add_vertex m2_shader_outcome m2_shader_status_name m2_render_tree_sites m2_render_last_error; do \
 		i686-w64-mingw32-objdump -p $(TARGET) | grep -q " $$sym$$" \
 			|| { echo "FAIL: $(TARGET) does not import $$sym" >&2; exit 1; }; \
 	done

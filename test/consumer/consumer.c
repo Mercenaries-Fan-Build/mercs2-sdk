@@ -25,6 +25,13 @@ static void OnWorldLoaded(int reached_idx, void* ud) {
     m2_logf("world reached phase %d (%s)", reached_idx, m2_loadtrigger_phase_name(reached_idx));
     m2_logf("ConsumerFP: %s", m2_shader_status_name(m2_shader_outcome("ConsumerFP")));
     m2_logf("ConsumerVP: %s", m2_shader_status_name(m2_shader_outcome("ConsumerVP")));
+    /* Off DllMain: the call waits for the game's code to be decrypted. */
+    {
+        m2_tree_sites t;
+        t.size = sizeof t;
+        if (m2_render_tree_sites(&t)) m2_logf("tree Z-prepass loop %p", t.zpass_loop);
+        else m2_logf("m2_render_tree_sites: %s", m2_render_last_error());
+    }
 }
 
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
