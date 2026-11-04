@@ -13,7 +13,7 @@ HEADER   := $(BUILDDIR)/load_ladder.gen.h
 
 # The mercs2_mod_runtime release the DLL is built from. scripts/fetch_runtime.sh downloads it from
 # crates.io and checks it against the sha256 the index records.
-RUNTIME_VERSION := 0.4.0
+RUNTIME_VERSION := 0.5.0
 RUNTIME         := $(BUILDDIR)/mercs2_mod_runtime-$(RUNTIME_VERSION)
 
 # The release pipeline passes the tag without its `v`. A build without VERSION reports 0.0.0, a version
