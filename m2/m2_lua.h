@@ -40,7 +40,8 @@ typedef void (*m2_lua_tick_cb)(void* L, void* ud);
  * detours. Idempotent. 1 on success; 0 with m2_lua_last_error() set. Never from DllMain. */
 M2_API int m2_lua_install(void);
 
-/* The last failure the Lua host recorded, or NULL. Valid until the next failure. Also in m2-sdk.log. */
+/* The last failure the Lua host recorded on the calling thread, or NULL. Valid until that thread's next
+ * failure; another thread's failure never touches it (since 0.5.1). Also in m2-sdk.log. */
 M2_API const char* m2_lua_last_error(void);
 
 /* Add the global table `name` holding `fns` to every state the game creates (before its scripts run) and
