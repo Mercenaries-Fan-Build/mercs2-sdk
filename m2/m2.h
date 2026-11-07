@@ -20,6 +20,7 @@
 #include "m2_loadtrigger.h"
 #include "m2_shader.h"
 #include "m2_lua.h"
+#include "m2_lua_debug.h"
 #include "m2_render.h"
 
 #endif /* M2_H */
