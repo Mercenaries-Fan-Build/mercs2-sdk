@@ -149,6 +149,7 @@ The qm release CI uses is pinned in [`.github/qm-version`](.github/qm-version).
 | [`m2_loadtrigger.h`](m2/m2_loadtrigger.h) | Fire callbacks as the world load crosses loadprobe milestones. |
 | [`m2_shader.h`](m2/m2_shader.h) | Register new shaders in the game's own shader registry (the `shader-registry` capability). |
 | [`m2_lua.h`](m2/m2_lua.h) | The game's Lua, shared through one set of detours: add namespaces and callbacks (`m2_lua_install`, `m2_lua_add_namespace`). |
+| [`m2_lua_debug.h`](m2/m2_lua_debug.h) | The Workshop Missions debugger's host in the game: a transport passes `debug.*` frames in (`m2_lua_debug_request`) and registers the sink they come out through; breakpoints pause the game with a notice the player can dismiss (OK or F8). |
 
 **`.text` MinHook, never `.rdata`.** The cracked retail EXE tolerates code detours but anti-tampers
 registration-table writes — a `.rdata` slot patch crashed early init under SecuROM. `m2_hook` routes

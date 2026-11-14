@@ -38,7 +38,8 @@ typedef struct m2_tree_sites {
  * 30 s (the message names what did not match). */
 M2_API int m2_render_tree_sites(m2_tree_sites* out);
 
-/* The last failure a render call recorded, or NULL. Valid until the next failure. Also in m2-sdk.log. */
+/* The last failure a render call recorded on the calling thread, or NULL. Valid until that thread's next
+ * failure; another thread's failure never touches it (since 0.5.1). Also in m2-sdk.log. */
 M2_API const char* m2_render_last_error(void);
 
 #endif /* M2_RENDER_H */
