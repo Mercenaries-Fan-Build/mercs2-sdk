@@ -32,6 +32,19 @@ static void OnWorldLoaded(int reached_idx, void* ud) {
         if (m2_render_tree_sites(&t)) m2_logf("tree Z-prepass loop %p", t.zpass_loop);
         else m2_logf("m2_render_tree_sites: %s", m2_render_last_error());
     }
+    {
+        m2_display_mode_sites d;
+        unsigned char code[32], patch[9];
+        int desktop = 0;
+        d.size = sizeof d;
+        if (m2_render_display_mode_sites(&d)) {
+            m2_logf("display-mode refresh test %p, %u bytes of filter code", d.refresh_cmp,
+                    m2_render_display_mode_filter(code, 255, 255, code, sizeof code, patch));
+            m2_logf("picked mode %d", m2_render_pick_display_mode(NULL, 0, 1920, 1080, 0, 0, &desktop));
+        } else {
+            m2_logf("m2_render_display_mode_sites: %s", m2_render_last_error());
+        }
+    }
 }
 
 BOOL WINAPI DllMain(HINSTANCE inst, DWORD reason, LPVOID reserved) {
