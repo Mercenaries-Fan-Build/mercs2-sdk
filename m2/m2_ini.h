@@ -9,6 +9,10 @@
 
 #include "m2_api.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Called once per `key = value` line (both trimmed, NUL-terminated). */
 typedef void (*m2_ini_kv)(void* ud, const char* key, const char* value);
 
@@ -18,5 +22,9 @@ M2_API int m2_ini_parse(const char* path, m2_ini_kv cb, void* ud);
 /* Convenience parsers for callback bodies. */
 M2_API int  m2_ini_bool(const char* value);            /* "1"/"true"/"on"/"yes" -> 1 */
 M2_API int  m2_ini_int(const char* value, int fallback);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* M2_INI_H */
