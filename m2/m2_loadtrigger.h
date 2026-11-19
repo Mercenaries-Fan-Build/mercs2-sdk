@@ -21,6 +21,10 @@
 
 #include "load_ladder.gen.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Fired once when the load first reaches the registered target phase. `reached_idx`
  * is the phase index whose marker actually appeared (>= the registered target). */
 typedef void (*m2_phase_cb)(int reached_idx, void* ud);
@@ -37,5 +41,9 @@ M2_API int m2_loadtrigger_current_phase(void);
 
 /* Human-readable phase name for an index, or "?" if out of range. */
 M2_API const char* m2_loadtrigger_phase_name(int idx);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* M2_LOADTRIGGER_H */
