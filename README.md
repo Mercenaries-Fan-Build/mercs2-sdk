@@ -327,8 +327,9 @@ runs, with a check that they call one `index2adr`, one `luaH_getnum` and one `lu
   the binding or tick was handed, never a stored one.
 - `m2_lua_push_ref` returns 1 when it pushed the value; push the arguments and call `m2_lua_pcall` only
   then.
-- Pass `nresults` 0 to `m2_lua_pcall`; nothing in the SDK reads results off the stack. A count whose
-  results would not fit below the running function's stack top (`ci->top`) is refused with -1.
+- Pass `nresults` 0 to `m2_lua_pcall`; nothing in the SDK reads results off the stack. Lua 5.1's
+  `checkresults` limit applies: `nresults - nargs` above `ci->top - top` (the running function's stack
+  room, in slots) is refused with -1, since the results would be written past the stack.
 - Failures go to `m2-sdk.log` without flushing it to disk for each one, and a string error message is
   kept up to its first 1536 bytes.
 - While `m2_lua_pcall` runs, tick callbacks do not run on that thread, so a callback that calls back
