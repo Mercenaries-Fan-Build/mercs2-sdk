@@ -136,8 +136,8 @@ M2_API int m2_lua_push_ref(void* L, int ref);
  * whose message is logged and popped (a string message is kept up to its first 1536 bytes, then marked
  * with its length); -1 when it refused to call (an unusable L,
  * a call off the state's thread, nargs < 0, fewer than nargs + 1 values in the frame, nresults < -1 or
- * more results than fit from the function's slot up to the running function's ci->top (Lua's own limit;
- * a larger count would write past the stack), the game's Lua not resolved), with nothing called and the
+ * nresults - nargs above ci->top - top in slots (Lua 5.1's checkresults: the running function's stack
+ * room; a larger count would write past the stack), the game's Lua not resolved), with nothing called and the
  * stack unchanged. nresults -1 (LUA_MULTRET) keeps every result. Tick callbacks do not run on this thread
  * while the call does, and m2_lua_in_exec() returns 1. */
 M2_API int m2_lua_pcall(void* L, int nargs, int nresults);
