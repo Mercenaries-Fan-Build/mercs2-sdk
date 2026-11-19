@@ -40,8 +40,11 @@ typedef void (*m2_lua_state_cb)(void* L, int is_new_cycle, void* ud);
  * m2_lua_pcall runs on that thread. Very frequent: keep it cheap. */
 typedef void (*m2_lua_tick_cb)(void* L, void* ud);
 
-/* Resolve the game's Lua sites (waiting up to 30 s for SecuROM to decrypt the code) and attach the
- * detours. Idempotent. 1 on success; 0 with m2_lua_last_error() set. Never from DllMain. */
+/* Resolve the game's Lua sites (waiting up to 30 s for SecuROM to decrypt the code), then the four
+ * function-reference sites, and attach the detours. Idempotent. 1 on success; 0 with m2_lua_last_error()
+ * set (and an ERROR line in m2-sdk.log naming what failed) when a site did not resolve, a
+ * function-reference pattern included, in which case nothing is attached, or a detour could not be
+ * attached. Never from DllMain. */
 M2_API int m2_lua_install(void);
 
 /* The last failure the Lua host recorded on the calling thread, or NULL. Valid until that thread's next
