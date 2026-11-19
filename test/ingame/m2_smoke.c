@@ -39,6 +39,17 @@ static void Check(int ok, const char* what) {
     m2_logf("%s: %s", ok ? "PASS" : "FAIL", what);
 }
 
+/* `text` holds `part`. */
+static int Contains(const char* text, const char* part) {
+    int n = lstrlenA(part);
+    for (; *text; text++) {
+        int i = 0;
+        while (i < n && text[i] == part[i]) i++;
+        if (i == n) return 1;
+    }
+    return 0;
+}
+
 static void Outcome(const char* name, m2_shader_status want) {
     m2_shader_status got = m2_shader_outcome(name);
     char line[160];
@@ -117,25 +128,34 @@ static void Refs(void* L) {
     if (g_nrefs != 2) return;
     Check(g_refs[0] != g_refs[1], "the two refs differ");
 
-    m2_lua_push_ref(L, g_refs[0]);
+    Check(m2_lua_push_ref(L, g_refs[0]) == 1, "m2_lua_push_ref of the kept callback returns 1");
     m2_lua_push_number(L, 21);
     st = m2_lua_pcall(L, 1, 0);
     Check(st == 0, "m2_lua_pcall of the kept callback returns 0");
     Exec(L, "return M2SmokeGot", 0, "[ok]\t42");
 
-    m2_lua_push_ref(L, g_refs[1]);
+    Check(m2_lua_push_ref(L, g_refs[1]) == 1, "m2_lua_push_ref of the erroring callback returns 1");
     st = m2_lua_pcall(L, 0, 0);
     e = m2_lua_last_error();
     Check(st == 2, "m2_lua_pcall of the erroring callback returns 2 (LUA_ERRRUN)");
-    Check(e != NULL && lstrlenA(e) > 0, "its error is kept for m2_lua_last_error");
+    Check(e != NULL && Contains(e, "smoke callback"), "its error is kept for m2_lua_last_error");
     if (e) m2_logf("callback error: %s", e);
 
     Check(m2_lua_pcall(L, 64, 0) == -1, "m2_lua_pcall refuses more arguments than the frame holds");
+    Check(m2_lua_push_ref(L, g_refs[0]) == 1, "m2_lua_push_ref pushes the callback again");
+    Check(m2_lua_pcall(L, 0, 1000) == -1, "m2_lua_pcall refuses 1000 results, more than fit below ci->top");
+    Check(m2_lua_pcall(L, 0, -2) == -1, "m2_lua_pcall refuses nresults below LUA_MULTRET");
+    Check(m2_lua_nargs(L) == depth + 1, "the refused calls left the pushed callback in place");
+    Check(m2_lua_pcall(L, 0, 0) == 0, "m2_lua_pcall then calls it");
     Check(m2_lua_nargs(L) == depth, "the frame is as it was");
 
-    m2_lua_unref(L, g_refs[0]);
-    m2_lua_unref(L, g_refs[1]);
+    Check(m2_lua_unref(L, g_refs[0]) == 1, "m2_lua_unref releases the first ref");
+    Check(m2_lua_unref(L, g_refs[1]) == 1, "m2_lua_unref releases the second ref");
     Check(m2_lua_nargs(L) == depth, "m2_lua_unref leaves the frame as it was");
+    Check(m2_lua_unref(L, g_refs[0]) == 0, "a second m2_lua_unref of one ref is refused");
+    Check(m2_lua_push_ref(L, g_refs[0]) == 0, "m2_lua_push_ref of a released ref is refused");
+    Check(m2_lua_push_ref(L, 0x7fffffff) == 0, "a ref m2_lua_ref did not return is refused");
+    Check(m2_lua_nargs(L) == depth, "the refused calls pushed nothing");
 }
 
 static void OnTick(void* L, void* ud) {
