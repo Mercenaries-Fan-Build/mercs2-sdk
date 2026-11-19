@@ -24,6 +24,10 @@
 
 #include "m2_api.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Where each version comes from. The one source is manifest.yaml's shipment.version, which the
  * release stamps from the version it releases and checks against the tag.
  *
@@ -82,5 +86,9 @@ static __inline int m2_abi_ok(void) {
     if (have / 10000 != M2_VERSION_MAJOR) return 0;
     return have >= M2_VERSION_NUM;
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* M2_VERSION_H */
