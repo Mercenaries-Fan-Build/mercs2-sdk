@@ -85,7 +85,7 @@ M2_API void m2_lua_push_bool(void* L, int b);
 M2_API void m2_lua_push_number(void* L, double n);
 M2_API void m2_lua_push_string(void* L, const char* s, int len);
 
-/* Function references (since 0.7.0): keep a Lua value, such as a callback a script passes to a binding,
+/* Function references (since 0.6.2): keep a Lua value, such as a callback a script passes to a binding,
  * and call it later on the game thread. Through the game's own luaL_ref, luaL_unref, lua_rawgeti and
  * lua_pcall, found in the game image by signature when m2_lua_install runs. Lua 5.1 semantics. The value
  * is kept in the registry of the global state its L belongs to (L+0x10), so a ref works on that L and on
