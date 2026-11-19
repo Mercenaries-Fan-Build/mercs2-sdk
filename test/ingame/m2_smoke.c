@@ -143,10 +143,12 @@ static void Refs(void* L) {
 
     Check(m2_lua_pcall(L, 64, 0) == -1, "m2_lua_pcall refuses more arguments than the frame holds");
     Check(m2_lua_push_ref(L, g_refs[0]) == 1, "m2_lua_push_ref pushes the callback again");
-    Check(m2_lua_pcall(L, 0, 1000) == -1, "m2_lua_pcall refuses 1000 results, more than fit below ci->top");
+    Check(m2_lua_pcall(L, 0, 1000) == -1, "m2_lua_pcall refuses 1000 results, more than checkresults allows");
     Check(m2_lua_pcall(L, 0, -2) == -1, "m2_lua_pcall refuses nresults below LUA_MULTRET");
     Check(m2_lua_nargs(L) == depth + 1, "the refused calls left the pushed callback in place");
-    Check(m2_lua_pcall(L, 0, 0) == 0, "m2_lua_pcall then calls it");
+    m2_lua_push_number(L, 4);
+    Check(m2_lua_pcall(L, 1, 0) == 0, "m2_lua_pcall then calls it");
+    Exec(L, "return M2SmokeGot", 0, "[ok]\t8");
     Check(m2_lua_nargs(L) == depth, "the frame is as it was");
 
     Check(m2_lua_unref(L, g_refs[0]) == 1, "m2_lua_unref releases the first ref");
