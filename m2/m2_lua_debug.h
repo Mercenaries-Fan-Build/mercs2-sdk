@@ -26,6 +26,10 @@
 
 #include "m2_api.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Deliver one frame (`len` bytes of JSON, not NUL-terminated) to client `conn`. Return 1 when it is
  * queued for the client, 0 when it cannot be (gone, or its outbox is full): the debugger then gives the
  * client up and removes the hook, rather than leave a gap in the events. Called on the game thread with
@@ -51,5 +55,9 @@ M2_API int m2_lua_debug_request(unsigned conn, const char* json, int len);
 
 /* Client `conn` is gone: if it held the debugger, the hook comes off and a paused game resumes. */
 M2_API void m2_lua_debug_disconnected(unsigned conn);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* M2_LUA_DEBUG_H */
