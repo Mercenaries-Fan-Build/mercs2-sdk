@@ -306,8 +306,10 @@ static void OnTick(void* L, void* ud) {  /* m2_lua_on_tick */
 
 The four functions are the game's own `luaL_ref`, `luaL_unref` (registry), `lua_rawgeti` and
 `lua_pcall`, resolved by whole-function signature in every supported build when `m2_lua_install`
-runs, with a check that they call one `index2adr`, one `luaH_getnum` and one `lua_rawseti`.
-`m2-sdk.log` names each address once they resolve:
+runs, with a check that they call one `index2adr`, one `luaH_getnum` and one `lua_rawseti`. When a
+pattern does not match exactly once, `m2_lua_install` fails (returns 0, attaches nothing) and its
+`m2_lua_last_error()` and `m2-sdk.log` ERROR line name the pattern. `m2-sdk.log` names each address
+once they resolve:
 
 | function | v1.0 | v1.1 |
 |---|---|---|
