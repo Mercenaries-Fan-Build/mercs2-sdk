@@ -39,7 +39,11 @@
  * module's HMODULE. This is what lets per-caller APIs stay source-compatible: `m2_logf` can route to
  * the right mod's log file without every call site growing a module argument.
  */
+#ifdef __cplusplus
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+#else
 extern IMAGE_DOS_HEADER __ImageBase;
+#endif
 #define M2_SELF_MODULE ((HMODULE)&__ImageBase)
 
 #endif /* M2_API_H */
