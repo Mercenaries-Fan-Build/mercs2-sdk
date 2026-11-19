@@ -92,8 +92,11 @@ M2_API void m2_lua_push_string(void* L, const char* s, int len);
  * every coroutine of it. A ref is m2-sdk's handle for that registry slot, not the registry number: it is
  * refused (never reaching the registry) once released, on another global state, and after the game
  * rebuilds the global state it was taken on (a load cycle, whose registry numbers its slots from 1
- * again). All four run only on the thread the state's scripts run on: call them from a binding, or from a
- * state or tick callback, with the L it was handed, never a stored one.
+ * again). These and m2_lua_pop run only on the thread the state's scripts run on: call them from a
+ * binding, or from a state or tick callback, with the L it was handed, never a stored one.
+ *
+ * A refusal leaves the stack as it was, so what the caller pushed before it stays there: take it back
+ * with m2_lua_pop. A tick on the base frame keeps it across frames otherwise.
  *
  *     static int g_ref;
  *     static int SetCallback(void* L) {                     // MyMod.SetCallback(fn)
@@ -104,8 +107,11 @@ M2_API void m2_lua_push_string(void* L, const char* s, int len);
  *
  *     // later, on the game thread (a tick callback, after m2_lua_state_ok(L)):
  *     if (m2_lua_push_ref(L, g_ref)) {
+ *         int st;
  *         m2_lua_push_number(L, 42);
- *         if (m2_lua_pcall(L, 1, 0) != 0) m2_logf("callback failed: %s", m2_lua_last_error());
+ *         st = m2_lua_pcall(L, 1, 0);
+ *         if (st == -1) m2_lua_pop(L, 2);                   // refused: the function and its argument stay
+ *         if (st != 0) m2_logf("callback failed: %s", m2_lua_last_error());
  *     }
  *     m2_lua_unref(L, g_ref);
  *     g_ref = 0;
@@ -141,9 +147,16 @@ M2_API int m2_lua_push_ref(void* L, int ref);
  * a call off the state's thread, nargs < 0, fewer than nargs + 1 values in the frame, nresults < -1 or
  * nresults - nargs above ci->top - top in slots (Lua 5.1's checkresults: the running function's stack
  * room; a larger count would write past the stack), the game's Lua not resolved), with nothing called and the
- * stack unchanged. nresults -1 (LUA_MULTRET) keeps every result. Tick callbacks do not run on this thread
- * while the call does, and m2_lua_in_exec() returns 1. */
+ * stack unchanged: the function and its arguments are still there, for the caller to m2_lua_pop. nresults
+ * -1 (LUA_MULTRET) keeps every result. Tick callbacks do not run on this thread while the call does, and
+ * m2_lua_in_exec() returns 1. */
 M2_API int m2_lua_pcall(void* L, int nargs, int nresults);
+
+/* lua_pop(L, n) (since 0.6.2): remove the top n values, as Lua 5.1's lua_settop(L, -n-1) does, which only
+ * lowers L->top (the game inlines it the same way). Returns 1 when removed; 0 when refused, with nothing
+ * removed: n < 0, n more than the values of the running function's frame (L->top - L->base), an unusable
+ * L, a call off the state's thread. n 0 removes nothing and returns 1. */
+M2_API int m2_lua_pop(void* L, int n);
 
 #ifdef __cplusplus
 }
