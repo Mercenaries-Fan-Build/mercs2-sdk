@@ -21,6 +21,10 @@
 
 #include "m2_api.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Called on the game thread for each captured log line (NUL-terminated message,
  * string args tab-joined). Keep it cheap and non-reentrant — do not call back
  * into anything that itself logs. */
@@ -39,5 +43,9 @@ M2_API int m2_loghook_set_active(m2_log_listener cb, void* ud, int active);
 
 /* MinHook the log stub and begin dispatching. Idempotent. Returns 1 on success. */
 M2_API int m2_loghook_install(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* M2_LOGHOOK_H */
