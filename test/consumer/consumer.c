@@ -41,8 +41,11 @@ static void OnTick(void* L, void* ud) {
     if (ref <= 0 || !m2_lua_state_ok(L)) return;
     g_later = 0;
     if (m2_lua_push_ref(L, ref)) {
+        int st;
         m2_lua_push_string(L, "later", -1);
-        if (m2_lua_pcall(L, 1, 0) != 0) m2_logf("m2_lua_pcall: %s", m2_lua_last_error());
+        st = m2_lua_pcall(L, 1, 0);
+        if (st == -1 && !m2_lua_pop(L, 2)) m2_logf("m2_lua_pop: %s", m2_lua_last_error());
+        if (st != 0) m2_logf("m2_lua_pcall: %s", m2_lua_last_error());
     } else {
         m2_logf("m2_lua_push_ref: %s", m2_lua_last_error());
     }
