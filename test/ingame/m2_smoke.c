@@ -6,7 +6,7 @@
  * load retail .sho files, which must register, and two that reuse a retail shader name, which the
  * registry must refuse as DUPLICATE); a log-stream listener, paused once the world is loaded; a load trigger on the world being fully
  * loaded, which reads back every shader outcome; the Lua host (a namespace, chunks run on the first
- * captured state, the tick).
+ * captured state, function references kept from Lua and called from C, the tick).
  */
 #include "m2.h"
 
@@ -39,6 +39,17 @@ static void Check(int ok, const char* what) {
     m2_logf("%s: %s", ok ? "PASS" : "FAIL", what);
 }
 
+/* `text` holds `part`. */
+static int Contains(const char* text, const char* part) {
+    int n = lstrlenA(part);
+    for (; *text; text++) {
+        int i = 0;
+        while (i < n && text[i] == part[i]) i++;
+        if (i == n) return 1;
+    }
+    return 0;
+}
+
 static void Outcome(const char* name, m2_shader_status want) {
     m2_shader_status got = m2_shader_outcome(name);
     char line[160];
@@ -64,9 +75,21 @@ static int SmokeFail(void* L) {
     return 0;
 }
 
+/* M2Smoke.Keep(v): keeps a ref to v (m2_lua_ref of the first argument) and returns it, 0 for none. */
+static int g_refs[4];
+static int g_nrefs = 0;
+
+static int SmokeKeep(void* L) {
+    int r = m2_lua_ref(L, 1);
+    if (r > 0 && g_nrefs < 4) g_refs[g_nrefs++] = r;
+    m2_lua_push_number(L, r);
+    return 1;
+}
+
 static const m2_lua_reg kSmokeLib[] = {
     { "Hello", SmokeHello },
     { "Fail", SmokeFail },
+    { "Keep", SmokeKeep },
     { NULL, NULL },
 };
 
@@ -78,6 +101,8 @@ static void Exec(void* L, const char* chunk, int want_status, const char* want_o
     Check(st == want_status && lstrcmpA(out, want_out) == 0, line);
 }
 
+static void Refs(void* L);
+
 static void OnState(void* L, int is_new_cycle, void* ud) {
     (void)ud;
     m2_logf("state captured: L=%p new=%d", L, is_new_cycle);
@@ -88,6 +113,66 @@ static void OnState(void* L, int is_new_cycle, void* ud) {
     Exec(L, "return (", 1, "[compile] \"[string \"return (\"]:1: unexpected symbol near '<eof>'\"");
     Exec(L, "error(\"boom\", 0)", 2, "[runtime] \"boom\"");
     Check(!m2_lua_in_exec(), "m2_lua_in_exec is 0 outside a chunk");
+    Refs(L);
+}
+
+/* Function references: keep two callbacks from Lua, call them from C, release them. */
+static void Refs(void* L) {
+    int depth = m2_lua_nargs(L);
+    int st;
+    const char* e;
+    Exec(L, "return M2Smoke.Keep(function(x) M2SmokeGot = x * 2 end) > 0", 0, "[ok]\ttrue");
+    Exec(L, "return M2Smoke.Keep(function() error(\"smoke callback\", 0) end) > 0", 0, "[ok]\ttrue");
+    Exec(L, "return M2Smoke.Keep(nil)", 0, "[ok]\t0");
+    Check(g_nrefs == 2, "m2_lua_ref kept the two functions and refused the nil");
+    if (g_nrefs != 2) return;
+    Check(g_refs[0] != g_refs[1], "the two refs differ");
+
+    Check(m2_lua_push_ref(L, g_refs[0]) == 1, "m2_lua_push_ref of the kept callback returns 1");
+    m2_lua_push_number(L, 21);
+    st = m2_lua_pcall(L, 1, 0);
+    Check(st == 0, "m2_lua_pcall of the kept callback returns 0");
+    Exec(L, "return M2SmokeGot", 0, "[ok]\t42");
+
+    Check(m2_lua_push_ref(L, g_refs[1]) == 1, "m2_lua_push_ref of the erroring callback returns 1");
+    st = m2_lua_pcall(L, 0, 0);
+    e = m2_lua_last_error();
+    Check(st == 2, "m2_lua_pcall of the erroring callback returns 2 (LUA_ERRRUN)");
+    Check(e != NULL && Contains(e, "smoke callback"), "its error is kept for m2_lua_last_error");
+    if (e) m2_logf("callback error: %s", e);
+
+    Check(m2_lua_pcall(L, 64, 0) == -1, "m2_lua_pcall refuses more arguments than the frame holds");
+    Check(m2_lua_push_ref(L, g_refs[0]) == 1, "m2_lua_push_ref pushes the callback again");
+    Check(m2_lua_pcall(L, 0, 1000) == -1, "m2_lua_pcall refuses 1000 results, more than checkresults allows");
+    Check(m2_lua_pcall(L, 0, -2) == -1, "m2_lua_pcall refuses nresults below LUA_MULTRET");
+    Check(m2_lua_nargs(L) == depth + 1, "the refused calls left the pushed callback in place");
+    m2_lua_push_number(L, 4);
+    Check(m2_lua_pcall(L, 1, 0) == 0, "m2_lua_pcall then calls it");
+    Exec(L, "return M2SmokeGot", 0, "[ok]\t8");
+    Check(m2_lua_nargs(L) == depth, "the frame is as it was");
+
+    /* A refused push after a successful one leaves the first value: m2_lua_pop takes it back. */
+    Check(m2_lua_push_ref(L, g_refs[0]) == 1, "m2_lua_push_ref pushes the first value");
+    Check(m2_lua_push_ref(L, 0x7fffffff) == 0, "a second m2_lua_push_ref of an unknown ref is refused");
+    Check(m2_lua_nargs(L) == depth + 1, "the first value is still on the stack");
+    Check(m2_lua_pop(L, 1) == 1, "m2_lua_pop removes it");
+    Check(m2_lua_nargs(L) == depth, "the top is back where it was");
+    /* A refused pcall leaves the function: m2_lua_pop takes it back. */
+    Check(m2_lua_push_ref(L, g_refs[0]) == 1, "m2_lua_push_ref pushes the callback");
+    Check(m2_lua_pcall(L, 0, -2) == -1, "m2_lua_pcall refuses it");
+    Check(m2_lua_pop(L, 1) == 1, "m2_lua_pop removes the function the refused call left");
+    Check(m2_lua_nargs(L) == depth, "the top is back where it was");
+    Check(m2_lua_pop(L, -1) == 0, "m2_lua_pop refuses a negative count");
+    Check(m2_lua_pop(L, 1000) == 0, "m2_lua_pop refuses more values than the frame holds");
+    Check(m2_lua_nargs(L) == depth, "the refused pops removed nothing");
+
+    Check(m2_lua_unref(L, g_refs[0]) == 1, "m2_lua_unref releases the first ref");
+    Check(m2_lua_unref(L, g_refs[1]) == 1, "m2_lua_unref releases the second ref");
+    Check(m2_lua_nargs(L) == depth, "m2_lua_unref leaves the frame as it was");
+    Check(m2_lua_unref(L, g_refs[0]) == 0, "a second m2_lua_unref of one ref is refused");
+    Check(m2_lua_push_ref(L, g_refs[0]) == 0, "m2_lua_push_ref of a released ref is refused");
+    Check(m2_lua_push_ref(L, 0x7fffffff) == 0, "a ref m2_lua_ref did not return is refused");
+    Check(m2_lua_nargs(L) == depth, "the refused calls pushed nothing");
 }
 
 static void OnTick(void* L, void* ud) {

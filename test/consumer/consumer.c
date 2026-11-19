@@ -20,12 +20,50 @@ static const m2_shader_class kConsumerPixel[4] = {
 };
 static const m2_shader_class kConsumerVertex = { "ConsumerVP", "ConsumerVP.sho" };
 
+/* A callback a script hands over (Consumer.Later(fn)), kept by ref and called on a later tick. */
+static int g_later = 0;
+
+static int Later(void* L) {
+    if (g_later > 0) m2_lua_unref(L, g_later);
+    g_later = m2_lua_ref(L, 1);
+    if (g_later == 0) m2_logf("m2_lua_ref: %s", m2_lua_last_error());
+    return 0;
+}
+
+static const m2_lua_reg kConsumerLib[] = {
+    { "Later", Later },
+    { NULL, NULL },
+};
+
+static void OnTick(void* L, void* ud) {
+    int ref = g_later;
+    (void)ud;
+    if (ref <= 0 || !m2_lua_state_ok(L)) return;
+    g_later = 0;
+    if (m2_lua_push_ref(L, ref)) {
+        int st;
+        m2_lua_push_string(L, "later", -1);
+        st = m2_lua_pcall(L, 1, 0);
+        if (st == -1 && !m2_lua_pop(L, 2)) m2_logf("m2_lua_pop: %s", m2_lua_last_error());
+        if (st != 0) m2_logf("m2_lua_pcall: %s", m2_lua_last_error());
+    } else {
+        m2_logf("m2_lua_push_ref: %s", m2_lua_last_error());
+    }
+    if (!m2_lua_unref(L, ref)) m2_logf("m2_lua_unref: %s", m2_lua_last_error());
+}
+
 static void OnWorldLoaded(int reached_idx, void* ud) {
     (void)ud;
     m2_logf("world reached phase %d (%s)", reached_idx, m2_loadtrigger_phase_name(reached_idx));
     m2_logf("ConsumerFP: %s", m2_shader_status_name(m2_shader_outcome("ConsumerFP")));
     m2_logf("ConsumerVP: %s", m2_shader_status_name(m2_shader_outcome("ConsumerVP")));
-    /* Off DllMain: the call waits for the game's code to be decrypted. */
+    /* Off DllMain: the calls wait for the game's code to be decrypted. */
+    if (m2_lua_install()) {
+        m2_lua_add_namespace("Consumer", kConsumerLib);
+        m2_lua_on_tick(OnTick, NULL);
+    } else {
+        m2_logf("m2_lua_install: %s", m2_lua_last_error());
+    }
     {
         m2_tree_sites t;
         t.size = sizeof t;

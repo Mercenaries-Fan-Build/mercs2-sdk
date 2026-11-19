@@ -15,6 +15,10 @@
 
 #include "m2_api.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* The billboard-tree render loops (BUG-014: the Z-prepass loop pushes no world matrix, so its packets
  * draw with the one last pushed before it; the shadow loop pushes the identity first). */
 typedef struct m2_tree_sites {
@@ -94,5 +98,9 @@ M2_API int m2_render_pick_display_mode(const void* list, unsigned int count, uns
 /* The last failure a render call recorded on the calling thread, or NULL. Valid until that thread's next
  * failure; another thread's failure never touches it (since 0.5.1). Also in m2-sdk.log. */
 M2_API const char* m2_render_last_error(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* M2_RENDER_H */

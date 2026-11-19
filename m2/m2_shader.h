@@ -30,6 +30,10 @@
 #include "m2_api.h"
 #include "m2_shader_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Queue one pixel shader with its 4 classes (plain, _pl, _sl, _pl_sl), in that order. The 4 names
  * must differ from each other and from every queued name. `family` must be a pixel family.
  *
@@ -52,5 +56,9 @@ M2_API m2_shader_status m2_shader_outcome(const char* name);
 /* The status enumerator's name, e.g. "M2_SHADER_ERR_DUPLICATE"; NULL for a value outside the
  * enum. */
 M2_API const char* m2_shader_status_name(m2_shader_status s);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* M2_SHADER_H */

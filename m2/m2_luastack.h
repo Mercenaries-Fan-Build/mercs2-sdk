@@ -14,6 +14,10 @@
 
 #include "m2_api.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Number of arguments on L's current C-function frame, or -1 if the stack looks
  * invalid (used as a cheap "is this really a lua_State?" check). */
 M2_API int m2_lua_nargs(void* L);
@@ -53,5 +57,9 @@ M2_API int m2_lua_arg_object(void* L, int idx0, unsigned int* out);
  * game's print/Debug.Printf line reads). Returns the count of string args joined,
  * or -1 if the stack is invalid. */
 M2_API int m2_lua_join_strings(void* L, char* out, int out_max);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* M2_LUASTACK_H */
