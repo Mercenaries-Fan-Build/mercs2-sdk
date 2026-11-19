@@ -148,7 +148,7 @@ The qm release CI uses is pinned in [`.github/qm-version`](.github/qm-version).
 | [`m2_loghook.h`](m2/m2_loghook.h) | One subscription to the game's whole log stream. |
 | [`m2_loadtrigger.h`](m2/m2_loadtrigger.h) | Fire callbacks as the world load crosses loadprobe milestones. |
 | [`m2_shader.h`](m2/m2_shader.h) | Register new shaders in the game's own shader registry (the `shader-registry` capability). |
-| [`m2_lua.h`](m2/m2_lua.h) | The game's Lua, shared through one set of detours: add namespaces and callbacks (`m2_lua_install`, `m2_lua_add_namespace`); keep a Lua function and call it later (`m2_lua_ref`, `m2_lua_push_ref`, `m2_lua_pcall`, `m2_lua_unref`). |
+| [`m2_lua.h`](m2/m2_lua.h) | The game's Lua, shared through one set of detours: add namespaces and callbacks (`m2_lua_install`, `m2_lua_add_namespace`); keep a Lua function and call it later (`m2_lua_ref`, `m2_lua_push_ref`, `m2_lua_pcall`, `m2_lua_unref`, `m2_lua_pop`). |
 | [`m2_lua_debug.h`](m2/m2_lua_debug.h) | The Workshop Missions debugger's host in the game: a transport passes `debug.*` frames in (`m2_lua_debug_request`) and registers the sink they come out through; breakpoints pause the game with a notice the player can dismiss (OK or F8). |
 
 **`.text` MinHook, never `.rdata`.** The cracked retail EXE tolerates code detours but anti-tampers
@@ -294,8 +294,11 @@ static int GetScore(void* L) {           /* MyMod.GetScore(board, cb) */
 static void OnTick(void* L, void* ud) {  /* m2_lua_on_tick */
     if (g_cb <= 0 || !m2_lua_state_ok(L)) return;
     if (m2_lua_push_ref(L, g_cb)) {      /* 0: nothing pushed, so nothing to call */
+        int st;
         m2_lua_push_number(L, 1234);
-        if (m2_lua_pcall(L, 1, 0) != 0) m2_logf("callback: %s", m2_lua_last_error());
+        st = m2_lua_pcall(L, 1, 0);
+        if (st == -1) m2_lua_pop(L, 2);  /* refused: the function and its argument are still there */
+        if (st != 0) m2_logf("callback: %s", m2_lua_last_error());
     } else {
         m2_logf("m2_lua_push_ref: %s", m2_lua_last_error());
     }
@@ -325,10 +328,15 @@ once they resolve:
   taken on another global state, or was taken before the game rebuilt its global state: a load cycle
   builds a fresh registry that numbers its slots from 1 again, where the old number would name one of
   the game's own values.
-- All four run only on the thread the state's scripts run on, and refuse any other thread. Use the `L`
-  the binding or tick was handed, never a stored one.
+- All four, and `m2_lua_pop`, run only on the thread the state's scripts run on, and refuse any other
+  thread. Use the `L` the binding or tick was handed, never a stored one.
 - `m2_lua_push_ref` returns 1 when it pushed the value; push the arguments and call `m2_lua_pcall` only
   then.
+- A refusal leaves the stack as it was: values pushed before a refused `m2_lua_push_ref`, and the
+  function and arguments of a refused `m2_lua_pcall` (-1), stay there. `m2_lua_pop(L, n)` removes the
+  top `n` (Lua 5.1's `lua_settop(L, -n-1)`, which only lowers `L->top`; the game inlines its own pops the
+  same way, `add dword ptr [L+8], -8` in `luaL_ref`). It refuses `n < 0` and more than the values of the
+  running function's frame. A tick on the base frame would otherwise keep them across frames.
 - Pass `nresults` 0 to `m2_lua_pcall`; nothing in the SDK reads results off the stack. Lua 5.1's
   `checkresults` limit applies: `nresults - nargs` above `ci->top - top` (the running function's stack
   room, in slots) is refused with -1, since the results would be written past the stack.
