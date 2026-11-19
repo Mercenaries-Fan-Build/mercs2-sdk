@@ -9,11 +9,19 @@
 
 #include "m2_api.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Initialize MinHook once (tolerates already-initialized). Returns 1 on success. */
 M2_API int m2_hook_init(void);
 
 /* Create + enable a detour at `target`, storing the trampoline (call-original) in
  * *orig. Returns 1 on success. `orig` may be NULL if the original is never called. */
 M2_API int m2_hook_attach(void* target, void* detour, void** orig);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* M2_HOOK_H */
