@@ -40,10 +40,13 @@ static void OnTick(void* L, void* ud) {
     (void)ud;
     if (ref <= 0 || !m2_lua_state_ok(L)) return;
     g_later = 0;
-    m2_lua_push_ref(L, ref);
-    m2_lua_push_string(L, "later", -1);
-    if (m2_lua_pcall(L, 1, 0) != 0) m2_logf("m2_lua_pcall: %s", m2_lua_last_error());
-    m2_lua_unref(L, ref);
+    if (m2_lua_push_ref(L, ref)) {
+        m2_lua_push_string(L, "later", -1);
+        if (m2_lua_pcall(L, 1, 0) != 0) m2_logf("m2_lua_pcall: %s", m2_lua_last_error());
+    } else {
+        m2_logf("m2_lua_push_ref: %s", m2_lua_last_error());
+    }
+    if (!m2_lua_unref(L, ref)) m2_logf("m2_lua_unref: %s", m2_lua_last_error());
 }
 
 static void OnWorldLoaded(int reached_idx, void* ud) {
