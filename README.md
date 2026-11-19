@@ -286,24 +286,28 @@ A binding that takes a callback, as `Net.LeaderboardGetScore(board, cb)` does, k
 static int g_cb;
 
 static int GetScore(void* L) {           /* MyMod.GetScore(board, cb) */
+    if (g_cb > 0) m2_lua_unref(L, g_cb); /* a second call before the tick replaces the first callback */
     g_cb = m2_lua_ref(L, 2);             /* a Lua stack index: 1 is the first argument */
     return 0;
 }
 
 static void OnTick(void* L, void* ud) {  /* m2_lua_on_tick */
     if (g_cb <= 0 || !m2_lua_state_ok(L)) return;
-    m2_lua_push_ref(L, g_cb);
-    m2_lua_push_number(L, 1234);
-    if (m2_lua_pcall(L, 1, 0) != 0) m2_logf("callback: %s", m2_lua_last_error());
+    if (m2_lua_push_ref(L, g_cb)) {      /* 0: nothing pushed, so nothing to call */
+        m2_lua_push_number(L, 1234);
+        if (m2_lua_pcall(L, 1, 0) != 0) m2_logf("callback: %s", m2_lua_last_error());
+    } else {
+        m2_logf("m2_lua_push_ref: %s", m2_lua_last_error());
+    }
     m2_lua_unref(L, g_cb);
     g_cb = 0;
 }
 ```
 
 The four functions are the game's own `luaL_ref`, `luaL_unref` (registry), `lua_rawgeti` and
-`lua_pcall`, resolved by whole-function signature in every supported build, with a check that they
-call one `index2adr`, one `luaH_getnum` and one `lua_rawseti`. `m2-sdk.log` names each address once
-they resolve:
+`lua_pcall`, resolved by whole-function signature in every supported build when `m2_lua_install`
+runs, with a check that they call one `index2adr`, one `luaH_getnum` and one `lua_rawseti`.
+`m2-sdk.log` names each address once they resolve:
 
 | function | v1.0 | v1.1 |
 |---|---|---|
@@ -312,13 +316,21 @@ they resolve:
 | `lua_rawgeti` | `0x0085DBB0` | `0x0085DDD0` |
 | `lua_pcall` | `0x0085DF50` | `0x0085E170` |
 
-- A ref is a slot in the registry of the global state its `L` belongs to (`L+0x10`): valid on that `L`
-  and every coroutine of it, and shared with the game's own callbacks. A load cycle builds a fresh
-  global state whose refs count from 1 again, so a ref made in an earlier cycle names some other value:
-  never push, call or release it. Use the `L` the binding or tick was handed, never a stored one.
-- Release each ref once: `luaL_unref` links the slot into the registry's free list, so a second
-  release corrupts the list and pushing a released ref pushes that link, a number, not nil.
-- Pass `nresults` 0 to `m2_lua_pcall`; nothing in the SDK reads results off the stack.
+- The value is kept in the registry of the global state its `L` belongs to (`L+0x10`), so a ref works
+  on that `L` and every coroutine of it. A ref is m2-sdk's handle for the registry slot, not the
+  registry number, and is never repeated in the process. `m2_lua_unref` and `m2_lua_push_ref` refuse
+  (return 0, nothing reaches the registry) a ref that was never returned, was already released, was
+  taken on another global state, or was taken before the game rebuilt its global state: a load cycle
+  builds a fresh registry that numbers its slots from 1 again, where the old number would name one of
+  the game's own values.
+- All four run only on the thread the state's scripts run on, and refuse any other thread. Use the `L`
+  the binding or tick was handed, never a stored one.
+- `m2_lua_push_ref` returns 1 when it pushed the value; push the arguments and call `m2_lua_pcall` only
+  then.
+- Pass `nresults` 0 to `m2_lua_pcall`; nothing in the SDK reads results off the stack. A count whose
+  results would not fit below the running function's stack top (`ci->top`) is refused with -1.
+- Failures go to `m2-sdk.log` without flushing it to disk for each one, and a string error message is
+  kept up to its first 1536 bytes.
 - While `m2_lua_pcall` runs, tick callbacks do not run on that thread, so a callback that calls back
   into the game's Lua cannot re-enter the tick that called it.
 
