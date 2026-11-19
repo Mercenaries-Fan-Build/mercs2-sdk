@@ -151,6 +151,21 @@ static void Refs(void* L) {
     Exec(L, "return M2SmokeGot", 0, "[ok]\t8");
     Check(m2_lua_nargs(L) == depth, "the frame is as it was");
 
+    /* A refused push after a successful one leaves the first value: m2_lua_pop takes it back. */
+    Check(m2_lua_push_ref(L, g_refs[0]) == 1, "m2_lua_push_ref pushes the first value");
+    Check(m2_lua_push_ref(L, 0x7fffffff) == 0, "a second m2_lua_push_ref of an unknown ref is refused");
+    Check(m2_lua_nargs(L) == depth + 1, "the first value is still on the stack");
+    Check(m2_lua_pop(L, 1) == 1, "m2_lua_pop removes it");
+    Check(m2_lua_nargs(L) == depth, "the top is back where it was");
+    /* A refused pcall leaves the function: m2_lua_pop takes it back. */
+    Check(m2_lua_push_ref(L, g_refs[0]) == 1, "m2_lua_push_ref pushes the callback");
+    Check(m2_lua_pcall(L, 0, -2) == -1, "m2_lua_pcall refuses it");
+    Check(m2_lua_pop(L, 1) == 1, "m2_lua_pop removes the function the refused call left");
+    Check(m2_lua_nargs(L) == depth, "the top is back where it was");
+    Check(m2_lua_pop(L, -1) == 0, "m2_lua_pop refuses a negative count");
+    Check(m2_lua_pop(L, 1000) == 0, "m2_lua_pop refuses more values than the frame holds");
+    Check(m2_lua_nargs(L) == depth, "the refused pops removed nothing");
+
     Check(m2_lua_unref(L, g_refs[0]) == 1, "m2_lua_unref releases the first ref");
     Check(m2_lua_unref(L, g_refs[1]) == 1, "m2_lua_unref releases the second ref");
     Check(m2_lua_nargs(L) == depth, "m2_lua_unref leaves the frame as it was");
