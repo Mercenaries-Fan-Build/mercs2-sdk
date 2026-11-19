@@ -5,7 +5,7 @@
 
 static int Callback(void* L) {
     int ref = m2_lua_ref(L, 1);                                  /* m2_lua.h */
-    if (ref > 0 && m2_lua_push_ref(L, ref)) m2_lua_pcall(L, 0, 0);
+    if (ref > 0 && m2_lua_push_ref(L, ref) && m2_lua_pcall(L, 0, 0) == -1) m2_lua_pop(L, 1);
     m2_lua_unref(L, ref);
     return m2_lua_nargs(L);                                      /* m2_luastack.h */
 }
