@@ -43,7 +43,7 @@ jobs:
                      m2_loadtrigger_on_phase m2_version_num \
                      m2_shader_add_pixel m2_shader_add_vertex m2_shader_outcome \
                      m2_shader_status_name \
-                     m2_lua_ref m2_lua_unref m2_lua_push_ref m2_lua_pcall; do
+                     m2_lua_ref m2_lua_unref m2_lua_push_ref m2_lua_pcall m2_lua_pop; do
             grep -q " $sym$" build/m2-sdk.exports.txt \
               || { echo "::error::m2-sdk.dll does not export $sym"; exit 1; }
           done
