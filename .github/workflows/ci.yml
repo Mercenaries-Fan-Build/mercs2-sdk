@@ -10,8 +10,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install the 32-bit MinGW cross-compiler
-        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-i686
+      - name: Install the 32-bit MinGW cross-compilers
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-i686 g++-mingw-w64-i686
 
       # Compile-only, before the DLL exists: a mod built through sdk.mk compiles manifest.yaml's
       # version, the release's stamped headers compile it alone, and the m2/ headers with no version
@@ -35,12 +35,16 @@ jobs:
             || { echo "::error::m2-sdk.dll is not a 32-bit PE: $fmt"; exit 1; }
           grep -q "file format pei-i386" <<<"$fmt" \
             || { echo "::error::m2-sdk.dll is not a 32-bit PE: $fmt"; exit 1; }
+          # The table goes to a file and grep reads the file: piped, `grep -q` exits at its first match,
+          # objdump dies of SIGPIPE writing the rest, and pipefail fails the step for a symbol that is there.
+          i686-w64-mingw32-objdump -p build/m2-sdk.dll > build/m2-sdk.exports.txt \
+            || { echo "::error::objdump could not read m2-sdk.dll's export table"; exit 1; }
           for sym in m2_hook_attach m2_logf_mod m2_loghook_add_listener m2_loghook_set_active \
                      m2_loadtrigger_on_phase m2_version_num \
                      m2_shader_add_pixel m2_shader_add_vertex m2_shader_outcome \
                      m2_shader_status_name \
                      m2_lua_ref m2_lua_unref m2_lua_push_ref m2_lua_pcall; do
-            i686-w64-mingw32-objdump -p build/m2-sdk.dll | grep -q " $sym$" \
+            grep -q " $sym$" build/m2-sdk.exports.txt \
               || { echo "::error::m2-sdk.dll does not export $sym"; exit 1; }
           done
           echo "exports verified"
@@ -50,6 +54,11 @@ jobs:
       # machine with 0x8007007E and no reason given. Only the import table settles it.
       - name: A consumer links against the shared layer
         run: make -C test/consumer verify
+
+      # A C++ mod compiles against C declarations either way; only the headers' extern "C" blocks make
+      # it import the C names the DLL exports instead of mangled ones it does not.
+      - name: A C++ consumer links against the shared layer by C names
+        run: make -C test/cxx verify
 
       # ---- The Quartermaster Shipment (manifest.yaml) ----------------------------------------------
       # manifest.yaml declares src/m2-sdk.dll, a copy of the build output. src/ is gitignored, and qm
