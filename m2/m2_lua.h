@@ -51,9 +51,11 @@ M2_API int m2_lua_install(void);
  * failure; another thread's failure never touches it (since 0.5.1). Also in m2-sdk.log. */
 M2_API const char* m2_lua_last_error(void);
 
-/* Add the global table `name` holding `fns` to every state the game creates (before its scripts run) and
- * every state a script runs on. Both are copied. 0 for a NULL or empty name, a NULL table, a name already
- * added, a row without a function, or more than 32 namespaces or 256 functions. */
+/* Add `fns` to the global table `name` on every state the game creates (before its scripts run) and
+ * every state a script runs on, creating the table when it does not exist. Several calls, from one mod or
+ * several, may add to the same table, the engine's own Net say (since 0.6.3). Both are copied. 0 for a
+ * NULL or empty name, a NULL table, a function already added to that table or named twice in `fns`, a row
+ * without a function, or more than 32 calls or 256 functions. */
 M2_API int m2_lua_add_namespace(const char* name, const m2_lua_reg* fns);
 
 /* 0 when the 16 slots are taken or cb is NULL. */
