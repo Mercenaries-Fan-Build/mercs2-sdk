@@ -93,6 +93,18 @@ static const m2_lua_reg kSmokeLib[] = {
     { NULL, NULL },
 };
 
+static int SmokeAgain(void* L) {
+    m2_lua_push_string(L, "again", -1);
+    return 1;
+}
+
+/* Added to M2Smoke by a second call, as a second mod would. */
+static const m2_lua_reg kSmokeMoreLib[] = { { "Again", SmokeAgain }, { NULL, NULL } };
+/* Adds Hello to M2Smoke a second time. */
+static const m2_lua_reg kSmokeDupLib[] = { { "Hello", SmokeAgain }, { NULL, NULL } };
+/* Added to the engine's own Net, beside its functions. */
+static const m2_lua_reg kSmokeNetLib[] = { { "M2SmokeHere", SmokeAgain }, { NULL, NULL } };
+
 static void Exec(void* L, const char* chunk, int want_status, const char* want_out) {
     char out[512];
     char line[768];
@@ -110,6 +122,8 @@ static void OnState(void* L, int is_new_cycle, void* ud) {
     Exec(L, "return M2Smoke.Hello() == \"hi\", type(1), 1 + 1", 0, "[ok]\ttrue\t\"number\"\t2");
     Exec(L, "return select(2, M2Smoke.Hello())", 0, "[ok]\t2.5");
     Exec(L, "local ok, e = pcall(M2Smoke.Fail) return ok, e", 0, "[ok]\tfalse\t\"smoke failure\"");
+    Exec(L, "return M2Smoke.Again(), M2Smoke.Hello()", 0, "[ok]\t\"again\"\t\"hi\"\t2.5");
+    Exec(L, "return Net.M2SmokeHere(), type(Net.IsMultiplayer)", 0, "[ok]\t\"again\"\t\"function\"");
     Exec(L, "return (", 1, "[compile] \"[string \"return (\"]:1: unexpected symbol near '<eof>'\"");
     Exec(L, "error(\"boom\", 0)", 2, "[runtime] \"boom\"");
     Check(!m2_lua_in_exec(), "m2_lua_in_exec is 0 outside a chunk");
@@ -192,7 +206,12 @@ static DWORD WINAPI LuaThread(LPVOID p) {
     }
     Check(1, "m2_lua_install");
     Check(m2_lua_add_namespace("M2Smoke", kSmokeLib), "m2_lua_add_namespace(M2Smoke)");
-    Check(!m2_lua_add_namespace("M2Smoke", kSmokeLib), "a second M2Smoke is refused");
+    Check(m2_lua_add_namespace("M2Smoke", kSmokeMoreLib), "a second call adds other functions to M2Smoke");
+    Check(!m2_lua_add_namespace("M2Smoke", kSmokeDupLib), "M2Smoke.Hello added a second time is refused");
+    const char* dup = m2_lua_last_error();
+    Check(dup && Contains(dup, "M2Smoke.Hello is already added"), "the refusal names M2Smoke.Hello");
+    Check(!m2_lua_add_namespace("M2Smoke", kSmokeLib), "M2Smoke's first table added again is refused");
+    Check(m2_lua_add_namespace("Net", kSmokeNetLib), "m2_lua_add_namespace(Net) adds to the engine's Net");
     Check(m2_lua_on_state(OnState, NULL), "m2_lua_on_state");
     Check(m2_lua_on_tick(OnTick, NULL), "m2_lua_on_tick");
     return 0;
